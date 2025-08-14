@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dropdown Test</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-md mx-auto bg-white p-6 rounded-lg shadow">
+        <h1 class="text-xl font-bold mb-4">Dropdown Test</h1>
+        
+        <div class="relative">
+            <div id="testDropdown" class="w-full px-4 py-3 border border-gray-300 rounded-lg cursor-pointer bg-white">
+                <div class="flex items-center justify-between">
+                    <span>Click to test dropdown</span>
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+            </div>
+            <div id="testMenu" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg hidden">
+                <div class="p-4">
+                    <p>Dropdown is working!</p>
+                    <button onclick="closeTest()" class="mt-2 bg-blue-500 text-white px-3 py-1 rounded">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('testDropdown').addEventListener('click', function() {
+            const menu = document.getElementById('testMenu');
+            menu.classList.toggle('hidden');
+            console.log('Test dropdown clicked!');
+        });
+
+        function closeTest() {
+            document.getElementById('testMenu').classList.add('hidden');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#testDropdown') && !e.target.closest('#testMenu')) {
+                document.getElementById('testMenu').classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

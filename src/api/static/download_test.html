@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Download Test</title>
+</head>
+<body>
+    <h1>Download Functionality Test</h1>
+    <button onclick="testBasicDownload()">Test Basic Download</button>
+    <button onclick="testAssessmentDownload()">Test Assessment Download</button>
+    <div id="log"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML += '<p>' + new Date().toLocaleTimeString() + ': ' + message + '</p>';
+            console.log(message);
+        }
+
+        function testBasicDownload() {
+            log('Testing basic download...');
+            const content = '<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Test Download</h1></body></html>';
+            
+            try {
+                const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'basic_test.html';
+                document.body.appendChild(a);
+                
+                log('Triggering download...');
+                a.click();
+                
+                setTimeout(() => {
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    log('Download cleanup completed');
+                }, 1000);
+                
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+
+        async function testAssessmentDownload() {
+            log('Testing assessment download...');
+            
+            try {
+                // Get a real assessment
+                const response = await fetch('http://localhost:8026/api/v1/assessments/history');
+                const data = await response.json();
+                
+                if (data.success && data.assessments.length > 0) {
+                    const assessmentId = data.assessments[0].id;
+                    log('Using assessment ID: ' + assessmentId);
+                    
+                    // Get individual assessment
+                    const assessmentResponse = await fetch(`http://localhost:8026/api/v1/assessments/${assessmentId}`);
+                    const assessmentData = await assessmentResponse.json();
+                    
+                    if (assessmentData.success) {
+                        const assessment = assessmentData.assessment;
+                        log('Assessment data retrieved for: ' + assessment.vendor_name);
+                        
+                        // Generate report content
+                        const reportContent = generateSimpleReport(assessment);
+                        
+                        // Download
+                        const blob = new Blob([reportContent], { type: 'text/html;charset=utf-8' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = `${assessment.vendor_name}_test_report.html`;
+                        document.body.appendChild(a);
+                        a.click();
+                        
+                        setTimeout(() => {
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                            log('Assessment download completed');
+                        }, 1000);
+                        
+                    } else {
+                        log('Failed to get assessment details');
+                    }
+                } else {
+                    log('No assessments found');
+                }
+            } catch (error) {
+                log('Error: ' + error.message);
+            }
+        }
+
+        function generateSimpleReport(assessment) {
+            return `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Risk Assessment Report - ${assessment.vendor_name}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background: #f8f9fa; padding: 20px; border-radius: 8px; }
+        .score { font-size: 24px; font-weight: bold; color: #333; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Vendor Risk Assessment Report</h1>
+        <h2>${assessment.vendor_name}</h2>
+        <p><strong>Domain:</strong> ${assessment.vendor_domain}</p>
+        <p><strong>Status:</strong> ${assessment.status}</p>
+        <div class="score">Risk Score: ${assessment.risk_score || 'N/A'}%</div>
+    </div>
+    <p>This is a test report generated at ${new Date().toLocaleString()}</p>
+</body>
+</html>`;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,705 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"                </div>
+            </form>
+        </div>
+        
+        <!-- Bulk Assessment Tab -->
+        <div id="bulkAssessment" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-xl font-semibold mb-4">Bulk Vendor Assessment</h2>
+                
+                <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+                    <h3 class="font-semibold text-blue-800 mb-2">📁 Upload Vendor List</h3>
+                    <p class="text-sm text-blue-700 mb-3">Upload a CSV or Excel file with your vendor list. Required columns:</p>
+                    <div class="text-xs text-blue-600 bg-white p-2 rounded border">
+                        <strong>Required:</strong> vendor_domain, vendor_name<br>
+                        <strong>Optional:</strong> regulations, data_sensitivity, business_criticality, auto_trust_center
+                    </div>
+                </div>
+                
+                <form id="bulkUploadForm" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Vendor List File</label>
+                        <input type="file" id="vendorFile" accept=".csv,.xlsx,.xls" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Requester Email (for Trust Center Access)</label>
+                        <input type="email" id="bulkRequesterEmail" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    
+                    <div class="flex gap-3">
+                        <button type="button" onclick="uploadVendorList()" 
+                                class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                            📤 Upload Vendor List
+                        </button>
+                        <button type="button" onclick="downloadSampleTemplate()" 
+                                class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                            📥 Download Sample Template
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- Upload Status -->
+                <div id="uploadStatus" class="mt-4 hidden">
+                    <div class="p-4 bg-green-50 border border-green-200 rounded-md">
+                        <h4 class="font-semibold text-green-800">Upload Successful!</h4>
+                        <p id="uploadDetails" class="text-green-700"></p>
+                        <button id="startBulkBtn" onclick="startBulkAssessments()" 
+                                class="mt-3 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                            🚀 Start Bulk Assessments
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Bulk Progress -->
+                <div id="bulkProgress" class="mt-6 hidden">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-semibold mb-2">Bulk Assessment Progress</h4>
+                        <div class="w-full bg-gray-200 rounded-full h-4 mb-2">
+                            <div id="bulkProgressBar" class="bg-blue-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p id="bulkStatusText" class="text-sm text-gray-600"></p>
+                        <div id="bulkResults" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Single Assessment Progress -->
+        <div id="progress" class="bg-white p-6 rounded-lg shadow mb-6 hidden">ent="width=device-width, initial-scale=1.0">
+    <title>Simple Assessment Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">Vendor Risk Assessment System</h1>
+        
+        <!-- Tab Navigation -->
+        <div class="flex border-b border-gray-200 mb-6">
+            <button id="singleTab" onclick="showTab('single')" 
+                    class="px-6 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600">
+                Single Assessment
+            </button>
+            <button id="bulkTab" onclick="showTab('bulk')" 
+                    class="px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700">
+                Bulk Assessment
+            </button>
+        </div>
+        
+        <!-- Single Assessment Tab -->
+        <div id="singleAssessment" class="tab-content">
+            <div class="bg-white p-6 rounded-lg shadow mb-6">
+                <h2 class="text-xl font-semibold mb-4">Single Vendor Assessment</h2>
+            <form id="simpleForm">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Vendor Domain</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="domain" value="github.com" 
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <button type="button" onclick="discoverTrustCenter()" 
+                                class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors whitespace-nowrap">
+                            🔍 Discover Trust Center
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Vendor Name</label>
+                    <input type="text" id="name" value="GitHub Inc" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Regulatory Requirements</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" value="soc2" checked class="regulation-checkbox mr-2">
+                            <span>SOC 2 Type II</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" value="iso27001" class="regulation-checkbox mr-2">
+                            <span>ISO 27001</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" value="gdpr" checked class="regulation-checkbox mr-2">
+                            <span>GDPR</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" value="hipaa" class="regulation-checkbox mr-2">
+                            <span>HIPAA</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" value="pci_dss" class="regulation-checkbox mr-2">
+                            <span>PCI DSS</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Requester Email (for Trust Center Access)</label>
+                    <input type="email" id="requesterEmail" value="assessor@company.com" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="Your email for document requests">
+                    <p class="text-xs text-gray-500 mt-1">Used to request compliance documents from vendor trust centers</p>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="enableTrustCenter" checked class="mr-2">
+                        <span class="text-sm font-medium text-gray-700">Enable Trust Center Integration</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1">Automatically request real SOC 2 and ISO 27001 documents from vendor trust centers</p>
+                </div>
+                
+                <button type="button" onclick="discoverTrustCenter()" 
+                        class="mb-4 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700">
+                    🔍 Discover Trust Center
+                </button>
+                
+                <button type="submit" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">
+                    Start Simple Assessment
+                </button>
+            </form>
+        </div>
+        
+        <div id="progress" class="bg-white p-6 rounded-lg shadow mb-6 hidden">
+            <h2 class="text-lg font-semibold mb-4">Assessment Progress</h2>
+            <div class="bg-gray-200 rounded-full h-2 mb-4">
+                <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <p id="statusText">Starting assessment...</p>
+        </div>
+        
+        <div id="results" class="bg-white p-6 rounded-lg shadow hidden">
+            <h2 class="text-lg font-semibold mb-4">Results</h2>
+            <pre id="resultData" class="bg-gray-100 p-4 rounded text-sm overflow-auto"></pre>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-lg font-semibold mb-4">Debug Log</h2>
+            <pre id="debugLog" class="bg-gray-100 p-4 rounded text-sm overflow-auto max-h-96"></pre>
+        </div>
+    </div>
+
+    <script>
+        let currentAssessmentId = null;
+        let currentBulkJobId = null;
+        
+        function log(message) {
+            const debugLog = document.getElementById('debugLog');
+            debugLog.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            debugLog.scrollTop = debugLog.scrollHeight;
+            console.log(message);
+        }
+        
+        function showTab(tabName) {
+            // Hide all tabs
+            document.getElementById('singleAssessment').classList.add('hidden');
+            document.getElementById('bulkAssessment').classList.add('hidden');
+            
+            // Show selected tab
+            document.getElementById(tabName + 'Assessment').classList.remove('hidden');
+            
+            // Update tab buttons
+            document.getElementById('singleTab').className = 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
+            document.getElementById('bulkTab').className = 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
+            
+            document.getElementById(tabName + 'Tab').className = 'px-6 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600';
+            
+            log(`Switched to ${tabName} assessment tab`);
+        }
+        
+        async function uploadVendorList() {
+            const fileInput = document.getElementById('vendorFile');
+            const emailInput = document.getElementById('bulkRequesterEmail');
+            
+            if (!fileInput.files.length) {
+                alert('Please select a file to upload');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            if (emailInput.value) {
+                formData.append('requester_email', emailInput.value);
+            }
+            
+            try {
+                log('Uploading vendor list...');
+                const response = await fetch('http://localhost:8026/api/v1/bulk/upload-vendors', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                log(`Upload response: ${JSON.stringify(result, null, 2)}`);
+                
+                if (result.success) {
+                    currentBulkJobId = result.job_id;
+                    document.getElementById('uploadStatus').classList.remove('hidden');
+                    document.getElementById('uploadDetails').textContent = 
+                        `${result.vendor_count} vendors uploaded successfully. Job ID: ${result.job_id}`;
+                    log(`Successfully uploaded ${result.vendor_count} vendors`);
+                } else {
+                    alert('Upload failed: ' + result.message);
+                    log(`Upload failed: ${result.message}`);
+                    if (result.required_columns) {
+                        log(`Required columns: ${result.required_columns.join(', ')}`);
+                        log(`Found columns: ${result.found_columns.join(', ')}`);
+                    }
+                }
+                
+            } catch (error) {
+                log(`Upload error: ${error.message}`);
+                alert('Upload failed: ' + error.message);
+            }
+        }
+        
+        async function startBulkAssessments() {
+            if (!currentBulkJobId) {
+                alert('No vendor list uploaded');
+                return;
+            }
+            
+            try {
+                log('Starting bulk assessments...');
+                const response = await apiCall(`/api/v1/bulk/start-assessments/${currentBulkJobId}`, 'POST');
+                
+                if (response.success) {
+                    document.getElementById('bulkProgress').classList.remove('hidden');
+                    log(`Started bulk assessments for ${response.total_vendors} vendors`);
+                    
+                    // Start polling for progress
+                    pollBulkProgress();
+                } else {
+                    alert('Failed to start assessments: ' + response.message);
+                }
+                
+            } catch (error) {
+                log(`Failed to start bulk assessments: ${error.message}`);
+                alert('Failed to start assessments: ' + error.message);
+            }
+        }
+        
+        async function pollBulkProgress() {
+            if (!currentBulkJobId) return;
+            
+            try {
+                const result = await apiCall(`/api/v1/bulk/status/${currentBulkJobId}`);
+                
+                if (result.success) {
+                    const progress = result.progress || 0;
+                    const status = result.status || 'pending';
+                    
+                    document.getElementById('bulkProgressBar').style.width = progress + '%';
+                    document.getElementById('bulkStatusText').textContent = 
+                        `Status: ${status} (${progress}%) - ${result.completed_count}/${result.total_vendors} completed`;
+                    
+                    if (status === 'completed') {
+                        displayBulkResults(result);
+                        log('Bulk assessments completed!');
+                    } else if (status === 'failed') {
+                        log('Bulk assessments failed');
+                        alert('Bulk assessments failed');
+                    } else {
+                        // Continue polling
+                        setTimeout(pollBulkProgress, 3000);
+                    }
+                }
+                
+            } catch (error) {
+                log(`Bulk progress polling failed: ${error.message}`);
+                setTimeout(pollBulkProgress, 5000); // Retry after longer delay
+            }
+        }
+        
+        function displayBulkResults(bulkResult) {
+            let resultsHtml = `
+                <div class="mt-4">
+                    <h4 class="font-semibold mb-3">📊 Bulk Assessment Results</h4>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div class="bg-green-50 p-3 rounded text-center">
+                            <div class="text-2xl font-bold text-green-600">${bulkResult.completed_count}</div>
+                            <div class="text-sm text-green-700">Completed</div>
+                        </div>
+                        <div class="bg-red-50 p-3 rounded text-center">
+                            <div class="text-2xl font-bold text-red-600">${bulkResult.failed_count}</div>
+                            <div class="text-sm text-red-700">Failed</div>
+                        </div>
+                        <div class="bg-blue-50 p-3 rounded text-center">
+                            <div class="text-2xl font-bold text-blue-600">${bulkResult.total_vendors}</div>
+                            <div class="text-sm text-blue-700">Total</div>
+                        </div>
+                    </div>
+            `;
+            
+            if (bulkResult.completed_assessments.length > 0) {
+                resultsHtml += `
+                    <details class="mb-4">
+                        <summary class="cursor-pointer font-medium text-green-700">✅ Completed Assessments (${bulkResult.completed_count})</summary>
+                        <div class="mt-2 space-y-2">
+                `;
+                
+                bulkResult.completed_assessments.forEach(assessment => {
+                    const riskColor = assessment.risk_level === 'low' ? 'text-green-600' : 
+                                     assessment.risk_level === 'medium' ? 'text-yellow-600' : 'text-red-600';
+                    resultsHtml += `
+                        <div class="border rounded p-3 bg-gray-50">
+                            <div class="flex justify-between">
+                                <div>
+                                    <strong>${assessment.vendor_name}</strong> (${assessment.vendor_domain})
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-bold">${assessment.overall_score}/100</span>
+                                    <span class="${riskColor} ml-2">${assessment.risk_level.toUpperCase()}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                resultsHtml += `
+                        </div>
+                    </details>
+                `;
+            }
+            
+            if (bulkResult.failed_assessments.length > 0) {
+                resultsHtml += `
+                    <details>
+                        <summary class="cursor-pointer font-medium text-red-700">❌ Failed Assessments (${bulkResult.failed_count})</summary>
+                        <div class="mt-2 space-y-2">
+                `;
+                
+                bulkResult.failed_assessments.forEach(failure => {
+                    resultsHtml += `
+                        <div class="border rounded p-3 bg-red-50">
+                            <strong>${failure.vendor_name}</strong> (${failure.vendor_domain})
+                            <div class="text-sm text-red-600">${failure.error}</div>
+                        </div>
+                    `;
+                });
+                
+                resultsHtml += `
+                        </div>
+                    </details>
+                `;
+            }
+            
+            resultsHtml += '</div>';
+            document.getElementById('bulkResults').innerHTML = resultsHtml;
+        }
+        
+        function downloadSampleTemplate() {
+            const csvContent = `vendor_domain,vendor_name,regulations,data_sensitivity,business_criticality,auto_trust_center
+github.com,GitHub Inc,"SOC 2 Type 2,ISO 27001",high,high,true
+slack.com,Slack Technologies,"SOC 2 Type 2,ISO 27001,PCI DSS",high,critical,true
+zoom.us,Zoom Video Communications,"SOC 2 Type 2,ISO 27001",medium,high,true
+salesforce.com,Salesforce Inc,"SOC 2 Type 2,ISO 27001,PCI DSS",high,critical,true`;
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'vendor_assessment_template.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            log('Downloaded sample template');
+        }
+        
+        async function discoverTrustCenter() {
+            const domain = document.getElementById('domain').value;
+            if (!domain) {
+                alert('Please enter a domain first');
+                return;
+            }
+            
+            try {
+                log(`Discovering trust center for ${domain}...`);
+                const response = await apiCall(`/api/v1/trust-center/discover/${domain}`, 'GET');
+                
+                if (response.success) {
+                    log(`Trust center found: ${response.trust_center_info.trust_center_url}`);
+                    log(`Access method: ${response.trust_center_info.access_method}`);
+                    alert(`Trust center discovered!\nURL: ${response.trust_center_info.trust_center_url}\nAccess: ${response.trust_center_info.access_method}`);
+                } else {
+                    log(`No trust center found for ${domain}`);
+                    alert('No trust center found for this vendor');
+                }
+            } catch (error) {
+                log(`Trust center discovery failed: ${error.message}`);
+                alert('Failed to discover trust center: ' + error.message);
+            }
+        }
+        
+        async function requestTrustCenterAccess() {
+            const domain = document.getElementById('domain').value;
+            const email = document.getElementById('requesterEmail').value;
+            const selectedRegulations = Array.from(document.querySelectorAll('.regulation-checkbox:checked'))
+                .map(cb => cb.value);
+            
+            if (!domain || !email) {
+                alert('Please enter domain and email');
+                return;
+            }
+            
+            try {
+                log(`Requesting trust center access for ${domain}...`);
+                const response = await apiCall('/api/v1/trust-center/request-access', 'POST', {
+                    vendor_domain: domain,
+                    requester_email: email,
+                    document_types: selectedRegulations
+                });
+                
+                if (response.success) {
+                    log(`Trust center access requested successfully`);
+                    if (response.request_id) {
+                        log(`Request ID: ${response.request_id}`);
+                        log(`Estimated response time: ${response.estimated_response_time}`);
+                        
+                        // Start monitoring the request
+                        setTimeout(() => checkTrustCenterStatus(response.request_id), 5000);
+                    }
+                } else {
+                    log(`Trust center access failed: ${response.message}`);
+                }
+                
+                return response;
+            } catch (error) {
+                log(`Trust center request failed: ${error.message}`);
+                throw error;
+            }
+        }
+        
+        async function checkTrustCenterStatus(requestId) {
+            try {
+                const response = await apiCall(`/api/v1/trust-center/status/${requestId}`, 'GET');
+                log(`Trust center request status: ${response.status}`);
+                
+                if (response.status === 'completed' && response.documents) {
+                    log(`Documents retrieved: ${response.documents.length} documents`);
+                    response.documents.forEach(doc => {
+                        log(`- ${doc.document_name} (${doc.file_size})`);
+                    });
+                } else if (response.status === 'pending') {
+                    log('Still waiting for documents...');
+                    setTimeout(() => checkTrustCenterStatus(requestId), 10000);
+                }
+            } catch (error) {
+                log(`Error checking trust center status: ${error.message}`);
+            }
+        }
+        
+        async function apiCall(endpoint, method = 'GET', data = null) {
+            try {
+                const baseUrl = 'http://localhost:8026';
+                const url = endpoint.startsWith('/') ? baseUrl + endpoint : endpoint;
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                log(`Making ${method} request to ${url}`);
+                const response = await fetch(url, options);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                log(`Response: ${JSON.stringify(result, null, 2)}`);
+                
+                return result;
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                throw error;
+            }
+        }
+        
+        async function startAssessment() {
+            const domain = document.getElementById('domain').value;
+            const name = document.getElementById('name').value;
+            const autoTrustCenter = document.getElementById('autoTrustCenter').checked;
+            const requesterEmail = document.getElementById('requesterEmail').value;
+            
+            // Get selected regulations
+            const selectedRegulations = Array.from(document.querySelectorAll('.regulation-checkbox:checked'))
+                .map(cb => cb.value);
+            
+            if (!domain) {
+                alert('Please enter a domain');
+                return;
+            }
+            
+            if (selectedRegulations.length === 0) {
+                alert('Please select at least one regulatory requirement');
+                return;
+            }
+            
+            try {
+                // Show progress
+                document.getElementById('progress').classList.remove('hidden');
+                document.getElementById('results').classList.add('hidden');
+                
+                // Step 1: Start trust center access if enabled
+                let trustCenterRequestId = null;
+                if (autoTrustCenter && requesterEmail) {
+                    log('Requesting trust center access...');
+                    try {
+                        const trustCenterResponse = await requestTrustCenterAccess();
+                        if (trustCenterResponse.success) {
+                            trustCenterRequestId = trustCenterResponse.request_id;
+                            log(`Trust center request initiated: ${trustCenterRequestId}`);
+                        }
+                    } catch (error) {
+                        log(`Trust center request failed, continuing with assessment: ${error.message}`);
+                    }
+                }
+                
+                // Start assessment
+                const assessmentData = {
+                    vendorDomain: domain,
+                    vendorName: name,
+                    dataSensitivity: 'medium',
+                    regulations: selectedRegulations,
+                    businessCriticality: 'high',
+                    autoFollowUp: false,
+                    deepScan: false,
+                    trust_center_request_id: trustCenterRequestId
+                };
+                
+                log(`Starting assessment with regulations: ${selectedRegulations.join(', ')}`);
+                if (trustCenterRequestId) {
+                    log(`Including trust center request: ${trustCenterRequestId}`);
+                }
+                const response = await apiCall('/api/v1/assessments', 'POST', assessmentData);
+                
+                if (response.success) {
+                    currentAssessmentId = response.assessment_id;
+                    log(`Assessment started with ID: ${currentAssessmentId}`);
+                    
+                    // Start polling
+                    pollAssessment();
+                } else {
+                    throw new Error(response.message || 'Failed to start assessment');
+                }
+                
+            } catch (error) {
+                log(`Assessment failed: ${error.message}`);
+                alert('Assessment failed: ' + error.message);
+                document.getElementById('progress').classList.add('hidden');
+            }
+        }
+        
+        async function pollAssessment() {
+            if (!currentAssessmentId) return;
+            
+            try {
+                const result = await apiCall(`/api/v1/assessments/${currentAssessmentId}`);
+                
+                // Update progress
+                const progress = result.progress || 0;
+                const status = result.status || 'processing';
+                
+                document.getElementById('progressBar').style.width = progress + '%';
+                document.getElementById('statusText').textContent = `Status: ${status} (${progress}%)`;
+                
+                if (status === 'completed' && result.results) {
+                    // Show results
+                    document.getElementById('progress').classList.add('hidden');
+                    document.getElementById('results').classList.remove('hidden');
+                    
+                    // Enhanced result display with compliance documents
+                    let resultsHtml = `
+                    <h3 class="text-lg font-semibold mb-4">Assessment Results</h3>
+                    <div class="bg-gray-50 p-4 rounded mb-4">
+                        <h4 class="font-semibold">Overall Score: ${result.results.overall_score}/100</h4>
+                        <p>Risk Level: <span class="font-medium">${result.results.risk_level.toUpperCase()}</span></p>
+                    </div>
+                    `;
+                    
+                    // Add compliance documents if available
+                    if (result.results.compliance_documents && result.results.compliance_documents.length > 0) {
+                        resultsHtml += `
+                        <div class="mb-4">
+                            <h4 class="font-semibold mb-2">📋 Compliance Documents</h4>
+                            <div class="space-y-2">
+                        `;
+                        
+                        result.results.compliance_documents.forEach(doc => {
+                            const statusColor = doc.status === 'current' ? 'text-green-600' : 'text-yellow-600';
+                            resultsHtml += `
+                                <div class="border rounded p-3 bg-white">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h5 class="font-medium">${doc.document_name}</h5>
+                                            <p class="text-sm text-gray-600">${doc.description}</p>
+                                            <p class="text-xs text-gray-500">Valid until: ${doc.valid_until}</p>
+                                        </div>
+                                        <span class="text-xs ${statusColor} font-medium">${doc.status}</span>
+                                    </div>
+                                    <div class="mt-2 space-x-2">
+                                        <a href="${doc.view_url}" target="_blank" 
+                                           class="text-blue-600 hover:underline text-sm">View Document</a>
+                                        <a href="${doc.download_url}" 
+                                           class="text-green-600 hover:underline text-sm">Download PDF</a>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        resultsHtml += `
+                            </div>
+                        </div>
+                        `;
+                    }
+                    
+                    resultsHtml += `
+                    <details class="mt-4">
+                        <summary class="cursor-pointer font-medium">Raw JSON Data</summary>
+                        <pre class="bg-gray-100 p-4 rounded text-sm overflow-auto mt-2">${JSON.stringify(result.results, null, 2)}</pre>
+                    </details>
+                    `;
+                    
+                    document.getElementById('resultData').innerHTML = resultsHtml;
+                    log('Assessment completed successfully!');
+                } else if (status === 'error') {
+                    throw new Error(result.error || 'Assessment failed');
+                } else {
+                    // Continue polling
+                    setTimeout(pollAssessment, 3000);
+                }
+                
+            } catch (error) {
+                log(`Polling failed: ${error.message}`);
+                document.getElementById('progress').classList.add('hidden');
+                alert('Assessment monitoring failed: ' + error.message);
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('simpleForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            startAssessment();
+        });
+        
+        // Initialize
+        log('Simple assessment test page loaded');
+    </script>
+</body>
+</html>

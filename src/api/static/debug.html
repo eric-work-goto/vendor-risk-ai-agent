@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Assessment API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Debug Assessment API</h1>
+        
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-lg font-semibold mb-4">Test API Endpoints</h2>
+            
+            <button onclick="testHealth()" class="bg-blue-500 text-white px-4 py-2 rounded mr-2 mb-2">
+                Test Health
+            </button>
+            
+            <button onclick="testStartAssessment()" class="bg-green-500 text-white px-4 py-2 rounded mr-2 mb-2">
+                Start Test Assessment
+            </button>
+            
+            <button onclick="testGetAssessment()" class="bg-yellow-500 text-white px-4 py-2 rounded mr-2 mb-2">
+                Get Assessment (if ID exists)
+            </button>
+        </div>
+        
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-lg font-semibold mb-4">Results</h2>
+            <pre id="results" class="bg-gray-100 p-4 rounded text-sm overflow-auto max-h-96"></pre>
+        </div>
+    </div>
+
+    <script>
+        let testAssessmentId = null;
+        
+        function log(message) {
+            const results = document.getElementById('results');
+            results.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function apiCall(url, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                log(`Making ${method} request to ${url}`);
+                const response = await fetch(url, options);
+                const result = await response.json();
+                
+                log(`Response status: ${response.status}`);
+                log(`Response: ${JSON.stringify(result, null, 2)}`);
+                
+                return result;
+            } catch (error) {
+                log(`Error: ${error.message}`);
+                throw error;
+            }
+        }
+        
+        async function testHealth() {
+            log('=== Testing Health Endpoint ===');
+            await apiCall('/health');
+        }
+        
+        async function testStartAssessment() {
+            log('=== Testing Start Assessment ===');
+            const testData = {
+                vendorDomain: 'github.com',
+                vendorName: 'GitHub Inc',
+                dataSensitivity: 'medium',
+                regulations: ['gdpr', 'soc2'],
+                businessCriticality: 'high',
+                autoFollowUp: true,
+                deepScan: false
+            };
+            
+            const result = await apiCall('/api/v1/assessments', 'POST', testData);
+            if (result.assessment_id) {
+                testAssessmentId = result.assessment_id;
+                log(`Stored assessment ID: ${testAssessmentId}`);
+            }
+        }
+        
+        async function testGetAssessment() {
+            if (!testAssessmentId) {
+                log('No assessment ID available. Start an assessment first.');
+                return;
+            }
+            
+            log('=== Testing Get Assessment ===');
+            await apiCall(`/api/v1/assessments/${testAssessmentId}`);
+        }
+        
+        // Auto-test on load
+        window.onload = () => {
+            log('Debug page loaded. Ready for testing.');
+        };
+    </script>
+</body>
+</html>

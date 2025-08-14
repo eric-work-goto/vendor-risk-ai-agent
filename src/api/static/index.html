@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vendor Risk Assessment AI</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .risk-low { background-color: #10b981; }
+        .risk-medium { background-color: #f59e0b; }
+        .risk-high { background-color: #ef4444; }
+        .regulation-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            margin: 2px;
+            background-color: #eff6ff;
+            color: #1e40af;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .regulation-tag button {
+            margin-left: 4px;
+            background: none;
+            border: none;
+            color: #1e40af;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .regulation-tag button:hover {
+            color: #1e3a8a;
+        }
+        #regulationsMenu {
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-shield-alt text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">Vendor Risk Assessment AI</h1>
+                        <p class="text-blue-100">Intelligent automation for vendor compliance screening</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="historyBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
+                        <i class="fas fa-history mr-2"></i>History
+                    </button>
+                    <button id="settingsBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition">
+                        <i class="fas fa-cog mr-2"></i>Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        <!-- Assessment Form -->
+        <div class="bg-white rounded-xl shadow-lg p-8 mb-8 card-hover">
+            <div class="flex items-center mb-6">
+                <i class="fas fa-search text-blue-600 text-2xl mr-3"></i>
+                <h2 class="text-2xl font-bold text-gray-800">New Vendor Assessment</h2>
+            </div>
+            
+            <form id="assessmentForm" class="space-y-6">
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-globe mr-2"></i>Vendor Domain/Website
+                        </label>
+                        <input type="url" id="vendorDomain" 
+                               placeholder="e.g., github.com or https://example.com"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               required>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-building mr-2"></i>Vendor Company Name
+                        </label>
+                        <input type="text" id="vendorName" 
+                               placeholder="e.g., GitHub Inc."
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               required>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-database mr-2"></i>Data Sensitivity Level
+                        </label>
+                        <select id="dataSensitivity" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="low">Low - Public data only</option>
+                            <option value="medium">Medium - Internal data</option>
+                            <option value="high" selected>High - Sensitive/PII data</option>
+                            <option value="critical">Critical - Regulated data</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-gavel mr-2"></i>Regulatory Requirements
+                        </label>
+                        <div class="space-y-2">
+                            <!-- Selected regulations display -->
+                            <div id="selectedRegulationsDisplay" class="min-h-12 p-3 border border-gray-300 rounded-lg bg-gray-50">
+                                <div id="selectedRegulationsTags" class="flex flex-wrap gap-2">
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                        GDPR
+                                        <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="removeRegulationSimple('gdpr')">×</button>
+                                    </span>
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                        SOC 2
+                                        <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="removeRegulationSimple('soc2')">×</button>
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <!-- Simple toggle button -->
+                            <button type="button" id="toggleRegulationsBtn" onclick="toggleRegulationsPanel()" 
+                                    class="w-full px-4 py-2 text-left border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-between">
+                                <span>✚ Add/Remove Regulations</span>
+                                <i id="toggleIcon" class="fas fa-chevron-down"></i>
+                            </button>
+                            
+                            <!-- Regulations panel -->
+                            <div id="regulationsPanel" class="hidden border border-gray-200 rounded-lg bg-white p-4 space-y-2">
+                                <div class="grid grid-cols-1 gap-2">
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="gdpr" checked class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>GDPR</strong> - General Data Protection Regulation</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="soc2" checked class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>SOC 2</strong> - Service Organization Control 2</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="hipaa" class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>HIPAA</strong> - Health Insurance Portability and Accountability Act</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="pci_dss" class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>PCI DSS</strong> - Payment Card Industry Data Security Standard</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="sox" class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>SOX</strong> - Sarbanes-Oxley Act</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="iso27001" class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>ISO 27001</strong> - Information Security Management</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="ccpa" class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>CCPA</strong> - California Consumer Privacy Act</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" value="nist" class="regulation-checkbox mr-2" onchange="updateRegulationsSimple()">
+                                        <span class="text-sm"><strong>NIST</strong> - Cybersecurity Framework</span>
+                                    </label>
+                                </div>
+                                
+                                <div class="border-t pt-2 mt-3 flex gap-2">
+                                    <button type="button" onclick="clearAllRegulationsSimple()" class="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">
+                                        Clear All
+                                    </button>
+                                    <button type="button" onclick="selectCommonRegulationsSimple()" class="text-xs bg-blue-100 hover:bg-blue-200 px-2 py-1 rounded">
+                                        Select Common
+                                    </button>
+                                    <button type="button" onclick="toggleRegulationsPanel()" class="text-xs bg-green-100 hover:bg-green-200 px-2 py-1 rounded ml-auto">
+                                        Done
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>Business Criticality
+                        </label>
+                        <select id="businessCriticality" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="low">Low - Nice to have</option>
+                            <option value="medium">Medium - Important</option>
+                            <option value="high" selected>High - Business critical</option>
+                            <option value="critical">Critical - Mission critical</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-4">
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="autoFollowUp" checked class="mr-2">
+                            <span class="text-sm text-gray-600">Enable automatic follow-up actions</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="deepScan" class="mr-2">
+                            <span class="text-sm text-gray-600">Deep compliance scan (slower but more thorough)</span>
+                        </label>
+                    </div>
+                    
+                    <button type="submit" id="startAssessment" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold transition flex items-center">
+                        <i class="fas fa-play mr-2"></i>Start Assessment
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Progress Section -->
+        <div id="progressSection" class="bg-white rounded-xl shadow-lg p-8 mb-8 hidden">
+            <div class="flex items-center mb-6">
+                <i class="fas fa-tasks text-green-600 text-2xl mr-3"></i>
+                <h2 class="text-2xl font-bold text-gray-800">Assessment Progress</h2>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-gray-700">Overall Progress</span>
+                    <span id="progressPercent" class="text-sm text-gray-600">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div id="progressBar" class="progress-bar bg-blue-600 h-3 rounded-full" style="width: 0%"></div>
+                </div>
+                
+                <div id="currentStep" class="flex items-center text-gray-600">
+                    <div class="loading-spinner mr-3"></div>
+                    <span>Initializing assessment...</span>
+                </div>
+                
+                <div id="stepsList" class="space-y-2 mt-4">
+                    <!-- Progress steps will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+            <!-- Risk Score Card -->
+            <div class="bg-white rounded-xl shadow-lg p-8 mb-8 card-hover">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <i class="fas fa-chart-line text-purple-600 text-2xl mr-3"></i>
+                        <h2 class="text-2xl font-bold text-gray-800">Risk Assessment Results</h2>
+                    </div>
+                    <div id="riskBadge" class="px-4 py-2 rounded-full text-white font-semibold">
+                        <!-- Risk level badge -->
+                    </div>
+                </div>
+                
+                <div class="grid md:grid-cols-4 gap-6">
+                    <div class="text-center">
+                        <div id="overallScore" class="text-4xl font-bold text-gray-800 mb-2">--</div>
+                        <div class="text-gray-600">Overall Score</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="complianceScore" class="text-4xl font-bold text-blue-600 mb-2">--</div>
+                        <div class="text-gray-600">Compliance</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="securityScore" class="text-4xl font-bold text-green-600 mb-2">--</div>
+                        <div class="text-gray-600">Security</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="dataProtectionScore" class="text-4xl font-bold text-purple-600 mb-2">--</div>
+                        <div class="text-gray-600">Data Protection</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Findings and Recommendations -->
+            <div class="grid md:grid-cols-2 gap-8 mb-8">
+                <!-- Compliance Findings -->
+                <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-clipboard-check text-blue-600 text-xl mr-3"></i>
+                        <h3 class="text-xl font-bold text-gray-800">Compliance Findings</h3>
+                    </div>
+                    <div id="complianceFindings" class="space-y-3">
+                        <!-- Findings will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Security Analysis -->
+                <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                    <div class="flex items-center mb-4">
+                        <i class="fas fa-shield-alt text-green-600 text-xl mr-3"></i>
+                        <h3 class="text-xl font-bold text-gray-800">Security Analysis</h3>
+                    </div>
+                    <div id="securityFindings" class="space-y-3">
+                        <!-- Security findings will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Items -->
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover">
+                <div class="flex items-center mb-4">
+                    <i class="fas fa-tasks text-orange-600 text-xl mr-3"></i>
+                    <h3 class="text-xl font-bold text-gray-800">Recommended Actions</h3>
+                </div>
+                <div id="actionItems" class="space-y-3">
+                    <!-- Action items will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="grid md:grid-cols-3 gap-6 mt-8">
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover text-center">
+                <i class="fas fa-file-export text-blue-600 text-3xl mb-4"></i>
+                <h3 class="text-lg font-semibold mb-2">Export Report</h3>
+                <p class="text-gray-600 mb-4">Generate PDF or Excel report</p>
+                <button id="exportBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition">
+                    Export
+                </button>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover text-center">
+                <i class="fas fa-bell text-green-600 text-3xl mb-4"></i>
+                <h3 class="text-lg font-semibold mb-2">Set Monitoring</h3>
+                <p class="text-gray-600 mb-4">Monitor vendor for changes</p>
+                <button id="monitorBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition">
+                    Monitor
+                </button>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-lg p-6 card-hover text-center">
+                <i class="fas fa-share text-purple-600 text-3xl mb-4"></i>
+                <h3 class="text-lg font-semibold mb-2">Share Results</h3>
+                <p class="text-gray-600 mb-4">Share with your team</p>
+                <button id="shareBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
+                    Share
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-16">
+        <div class="container mx-auto px-6 text-center">
+            <p>&copy; 2025 Vendor Risk Assessment AI. Powered by advanced AI technology.</p>
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <!-- History Modal -->
+    <div id="historyModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-96 overflow-y-auto">
+                <div class="p-6 border-b">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-2xl font-bold">Assessment History</h2>
+                        <button id="closeHistoryModal" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="historyContent" class="p-6">
+                    <!-- History content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+    <script>
+        // Simple, reliable regulatory requirements functions
+        let selectedRegulations = ['gdpr', 'soc2']; // Default selections
+
+        const regulationNames = {
+            'gdpr': 'GDPR',
+            'soc2': 'SOC 2',
+            'hipaa': 'HIPAA',
+            'pci_dss': 'PCI DSS',
+            'sox': 'SOX',
+            'iso27001': 'ISO 27001',
+            'ccpa': 'CCPA',
+            'nist': 'NIST'
+        };
+
+        function toggleRegulationsPanel() {
+            console.log('Toggle panel clicked!');
+            const panel = document.getElementById('regulationsPanel');
+            const icon = document.getElementById('toggleIcon');
+            
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+                console.log('Panel opened');
+            } else {
+                panel.classList.add('hidden');
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+                console.log('Panel closed');
+            }
+        }
+
+        function updateRegulationsSimple() {
+            console.log('Updating regulations...');
+            const checkboxes = document.querySelectorAll('.regulation-checkbox');
+            selectedRegulations = [];
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedRegulations.push(checkbox.value);
+                }
+            });
+            
+            updateRegulationDisplaySimple();
+        }
+
+        function updateRegulationDisplaySimple() {
+            const container = document.getElementById('selectedRegulationsTags');
+            
+            if (selectedRegulations.length === 0) {
+                container.innerHTML = '<span class="text-gray-500 text-sm">No regulations selected</span>';
+            } else {
+                container.innerHTML = selectedRegulations.map(reg => `
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        ${regulationNames[reg] || reg}
+                        <button type="button" class="ml-1 text-blue-600 hover:text-blue-800" onclick="removeRegulationSimple('${reg}')">×</button>
+                    </span>
+                `).join('');
+            }
+            console.log('Current selected regulations:', selectedRegulations);
+        }
+
+        function removeRegulationSimple(regulation) {
+            console.log('Removing regulation:', regulation);
+            selectedRegulations = selectedRegulations.filter(reg => reg !== regulation);
+            
+            // Update checkbox state
+            const checkbox = document.querySelector(`input[value="${regulation}"]`);
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+            
+            updateRegulationDisplaySimple();
+        }
+
+        function clearAllRegulationsSimple() {
+            console.log('Clearing all regulations');
+            selectedRegulations = [];
+            
+            // Uncheck all checkboxes
+            document.querySelectorAll('.regulation-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            
+            updateRegulationDisplaySimple();
+        }
+
+        function selectCommonRegulationsSimple() {
+            console.log('Selecting common regulations');
+            const commonRegulations = ['gdpr', 'soc2', 'iso27001'];
+            selectedRegulations = [...commonRegulations];
+            
+            // Update checkbox states
+            document.querySelectorAll('.regulation-checkbox').forEach(checkbox => {
+                checkbox.checked = commonRegulations.includes(checkbox.value);
+            });
+            
+            updateRegulationDisplaySimple();
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, initializing regulations...');
+            updateRegulationDisplaySimple();
+        });
+
+        // Make functions available globally for the form
+        window.getSelectedRegulations = function() {
+            return selectedRegulations;
+        };
+    </script>
+</body>
+</html>
