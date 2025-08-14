@@ -440,7 +440,7 @@
                             <i class="fas fa-exclamation-triangle text-3xl text-red-600"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">High Risk Vendors</p>
+                            <p class="text-sm font-medium text-gray-500">High Risk Vendors (Below 50/100)</p>
                             <p id="highRiskVendors" class="text-2xl font-semibold text-gray-900">-</p>
                         </div>
                     </div>
@@ -464,7 +464,7 @@
                             <i class="fas fa-chart-line text-3xl text-blue-600"></i>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Avg Risk Score</p>
+                            <p class="text-sm font-medium text-gray-500">Average Vendor Score</p>
                             <p id="avgRiskScore" class="text-2xl font-semibold text-gray-900">-</p>
                         </div>
                     </div>
@@ -539,7 +539,7 @@
                         
                         <button onclick="generateExecutiveReport()" 
                                 class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
-                            <i class="fas fa-file-pdf mr-2"></i>Generate Executive Report
+                            <i class="fas fa-file-pdf mr-2"></i>Generate Executive PDF Report
                         </button>
                     </div>
 
@@ -551,6 +551,33 @@
                         <p class="text-gray-600 mb-4">Detailed assessment report for specific vendors with technical findings and compliance status.</p>
                         
                         <div class="space-y-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Report Time Period</label>
+                                <select id="reportTimePeriod" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3">
+                                    <option value="all">All Time</option>
+                                    <option value="daily">Daily (Last 24 hours)</option>
+                                    <option value="weekly">Weekly (Last 7 days)</option>
+                                    <option value="monthly">Monthly (Last 30 days)</option>
+                                    <option value="quarterly">Quarterly (Last 90 days)</option>
+                                    <option value="yearly">Yearly (Last 365 days)</option>
+                                    <option value="custom">Custom Date Range</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Custom Date Range (initially hidden) -->
+                            <div id="customDateRange" class="hidden space-y-2">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">From Date</label>
+                                        <input type="date" id="fromDate" class="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 mb-1">To Date</label>
+                                        <input type="date" id="toDate" class="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Select Vendors</label>
                                 <select id="vendorSelect" multiple class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" size="3">
@@ -1964,16 +1991,34 @@
             
             if (!aiFeatures || !aiFeatures.offers_ai_services) {
                 return `
-                    <div class="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                        <h5 class="font-medium text-gray-800 mb-2">
-                            <i class="fas fa-robot mr-2"></i>AI Features Available
-                        </h5>
-                        <div class="text-sm text-gray-600">
-                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                No AI Services Detected
-                            </span>
-                            <p class="mt-2">This vendor does not appear to offer AI-powered features or services.</p>
-                            <p class="mt-1 text-xs text-gray-500">Debug: ${JSON.stringify(aiFeatures)}</p>
+                    <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('ai-features-no-risk-content')">
+                            <div class="flex items-center">
+                                <h5 class="font-medium text-green-800">
+                                    <i class="fas fa-robot mr-2"></i>AI Features Available
+                                </h5>
+                                <span class="ml-3 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    No Risk
+                                </span>
+                            </div>
+                            <i class="fas fa-chevron-down text-green-600" id="ai-features-no-risk-content-icon"></i>
+                        </div>
+                        
+                        <div id="ai-features-no-risk-content" class="hidden mt-4">
+                            <div class="bg-white p-3 rounded border">
+                                <div class="text-sm text-gray-600">
+                                    <p class="font-medium text-green-700 mb-2">✓ No AI Services Detected</p>
+                                    <p>This vendor does not appear to offer AI-powered features or services, which eliminates AI-related privacy and governance risks.</p>
+                                    <div class="mt-3 text-xs text-gray-500">
+                                        <span class="font-medium">Benefits:</span>
+                                        <ul class="list-disc list-inside mt-1 space-y-1">
+                                            <li>No AI data processing concerns</li>
+                                            <li>No AI bias or fairness issues</li>
+                                            <li>Standard privacy protection applies</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -2976,7 +3021,6 @@
             }
             
             const mode = document.getElementById('bulkAssessmentMode').value;
-            const autoTrustCenter = document.getElementById('bulkAutoTrustCenter')?.checked || true; // Default to true
             const requesterEmail = document.getElementById('bulkRequesterEmail').value;
             
             const selectedRegulations = Array.from(document.querySelectorAll('input[id^="bulk"]:checked'))
@@ -3662,18 +3706,21 @@
             try {
                 log('Loading dashboard data...');
                 const response = await apiCall('/api/v1/dashboard');
+                log('Dashboard response:', JSON.stringify(response));
                 
                 if (response.success) {
-                    updateDashboardStats(response.data);
+                    // Also get assessment history for calculations
+                    log('Loading assessment history...');
+                    const historyResponse = await apiCall('/api/v1/assessments/history');
+                    log('History response:', JSON.stringify(historyResponse));
+                    const assessments = historyResponse.assessments || [];
+                    log(`Found ${assessments.length} assessments in history`);
                     
-                    // Load assessment history to populate vendor select for reporting
-                    try {
-                        const historyResponse = await apiCall('/api/v1/assessments/history');
-                        if (historyResponse.assessments) {
-                            populateVendorSelect(historyResponse.assessments);
-                        }
-                    } catch (error) {
-                        console.log('Could not load assessment history for vendor select:', error);
+                    updateDashboardStats(response.data, assessments);
+                    
+                    // Populate vendor select for reporting
+                    if (assessments.length > 0) {
+                        populateVendorSelect(assessments);
                     }
                 } else {
                     throw new Error('Failed to load dashboard data');
@@ -3686,23 +3733,44 @@
             }
         }
 
-        function updateDashboardStats(data) {
+        function updateDashboardStats(data, assessments = []) {
+            // Use passed assessments or fallback to assessment_storage
+            const allAssessments = assessments.length > 0 ? assessments : Object.values(assessment_storage || {});
+            log(`updateDashboardStats called with ${allAssessments.length} assessments`);
+            log('Assessments data:', JSON.stringify(allAssessments.slice(0, 2))); // Log first 2 for brevity
+            
+            // Calculate vendor scores (out of 100)
+            const vendorScores = allAssessments.map(assessment => {
+                const riskScore = assessment.results?.overall_risk_score || 
+                                assessment.overall_risk_score || 
+                                assessment.risk_score || 0;
+                // Convert to 100-point scale if needed
+                return riskScore > 10 ? riskScore : riskScore * 10;
+            });
+            log(`Calculated vendor scores: ${JSON.stringify(vendorScores)}`);
+            
             // Update basic stats
-            document.getElementById('totalAssessments').textContent = data.total_assessments || '0';
-            document.getElementById('highRiskVendors').textContent = data.high_risk_vendors || '0';
+            document.getElementById('totalAssessments').textContent = allAssessments.length.toString();
+            log(`Set totalAssessments to: ${allAssessments.length}`);
+            
+            // High risk vendors are those below 50/100
+            const highRiskCount = vendorScores.filter(score => score < 50).length;
+            document.getElementById('highRiskVendors').textContent = highRiskCount.toString();
+            log(`Set highRiskVendors to: ${highRiskCount}`);
+            
             document.getElementById('pendingReviews').textContent = data.pending_reviews || '0';
             
-            // Calculate and display average risk score
-            const avgScore = data.total_assessments > 0 ? 
-                Math.round(Object.values(assessment_storage || {})
-                    .reduce((sum, assessment) => sum + (assessment.results?.overall_risk_score || 0), 0) / data.total_assessments) : 0;
-            document.getElementById('avgRiskScore').textContent = avgScore + '%';
+            // Calculate and display average vendor score
+            const avgScore = vendorScores.length > 0 ? 
+                Math.round(vendorScores.reduce((sum, score) => sum + score, 0) / vendorScores.length) : 0;
+            document.getElementById('avgRiskScore').textContent = avgScore + '/100';
+            log(`Set avgRiskScore to: ${avgScore}/100`);
             
-            // Update risk distribution chart
-            updateRiskDistributionChart(data.risk_distribution);
+            // Update risk distribution chart with score ranges
+            updateRiskDistributionChart(vendorScores, allAssessments);
             
-            // Update activity chart (mock data for now)
-            updateActivityChart();
+            // Update activity chart with actual assessment data
+            updateActivityChart(allAssessments);
             
             // Update main dashboard content
             document.getElementById('dashboardContent').innerHTML = `
@@ -3711,89 +3779,269 @@
                         <h4 class="font-medium mb-3 text-gray-800">
                             <i class="fas fa-clock mr-2 text-blue-600"></i>Recent Assessments
                         </h4>
-                        ${generateRecentAssessmentsHtml(data.recent_assessments)}
+                        ${generateRecentAssessmentsHtml(allAssessments)}
                     </div>
                     <div class="p-4 border rounded-lg">
                         <h4 class="font-medium mb-3 text-gray-800">
                             <i class="fas fa-exclamation-triangle mr-2 text-yellow-600"></i>Risk Alerts
                         </h4>
-                        ${generateRiskAlertsHtml(data)}
+                        ${generateRiskAlertsHtml({ high_risk_vendors: highRiskCount, pending_reviews: data.pending_reviews || 0 })}
                     </div>
                 </div>
             `;
         }
 
-        function updateRiskDistributionChart(distribution) {
+        function updateRiskDistributionChart(vendorScores, assessments = []) {
             const chartContainer = document.getElementById('riskDistributionChart');
-            const total = (distribution.low || 0) + (distribution.medium || 0) + (distribution.high || 0);
             
-            if (total === 0) {
+            if (!vendorScores || vendorScores.length === 0) {
                 chartContainer.innerHTML = '<p class="text-gray-500 text-center">No assessment data available</p>';
                 return;
             }
             
-            const lowPct = Math.round((distribution.low / total) * 100);
-            const mediumPct = Math.round((distribution.medium / total) * 100);
-            const highPct = Math.round((distribution.high / total) * 100);
+            // Use passed assessments or fallback to assessment_storage
+            const allAssessments = assessments.length > 0 ? assessments : Object.values(assessment_storage || {});
+            
+            // Create score range distribution with vendor tracking
+            const scoreRanges = {
+                '0-9': { count: 0, vendors: [] },
+                '10-19': { count: 0, vendors: [] },
+                '20-29': { count: 0, vendors: [] },
+                '30-39': { count: 0, vendors: [] },
+                '40-49': { count: 0, vendors: [] },
+                '50-59': { count: 0, vendors: [] },
+                '60-69': { count: 0, vendors: [] },
+                '70-79': { count: 0, vendors: [] },
+                '80-89': { count: 0, vendors: [] },
+                '90-100': { count: 0, vendors: [] }
+            };
+            
+            // Map scores to vendors and ranges
+            vendorScores.forEach((score, index) => {
+                const assessment = allAssessments[index];
+                const vendorName = assessment?.vendor_name || assessment?.vendor_domain || `Vendor ${index + 1}`;
+                
+                const rangeKey = score >= 90 ? '90-100' :
+                               score >= 80 ? '80-89' :
+                               score >= 70 ? '70-79' :
+                               score >= 60 ? '60-69' :
+                               score >= 50 ? '50-59' :
+                               score >= 40 ? '40-49' :
+                               score >= 30 ? '30-39' :
+                               score >= 20 ? '20-29' :
+                               score >= 10 ? '10-19' : '0-9';
+                
+                scoreRanges[rangeKey].count++;
+                scoreRanges[rangeKey].vendors.push({
+                    name: vendorName,
+                    score: Math.round(score)
+                });
+            });
+            
+            const total = vendorScores.length;
+            const activeRanges = Object.entries(scoreRanges)
+                .filter(([range, data]) => data.count > 0)
+                .sort((a, b) => b[1].count - a[1].count);
+            
+            if (activeRanges.length === 0) {
+                chartContainer.innerHTML = '<p class="text-gray-500 text-center">No vendor score data available</p>';
+                return;
+            }
+            
+            // Create pie chart with hover functionality
+            const colors = [
+                '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6b7280'
+            ];
+            
+            const pieSize = 160;
+            const radius = 70;
+            const centerX = pieSize / 2;
+            const centerY = pieSize / 2;
+            
+            // Convert to angles starting from -90 degrees (top)
+            let currentAngle = -Math.PI / 2; // Start at top
+            const segments = [];
+            
+            activeRanges.forEach(([range, data], index) => {
+                const percentage = data.count / total;
+                const sweepAngle = percentage * 2 * Math.PI;
+                const endAngle = currentAngle + sweepAngle;
+                
+                // Calculate start and end points
+                const x1 = centerX + radius * Math.cos(currentAngle);
+                const y1 = centerY + radius * Math.sin(currentAngle);
+                const x2 = centerX + radius * Math.cos(endAngle);
+                const y2 = centerY + radius * Math.sin(endAngle);
+                
+                // Determine if we need the large arc flag
+                const largeArcFlag = sweepAngle > Math.PI ? 1 : 0;
+                
+                // Create SVG path - only create path if percentage > 0
+                let pathData = '';
+                if (percentage > 0.001) { // Avoid tiny slices
+                    if (percentage >= 0.9999) { // Nearly full circle
+                        // Draw as circle
+                        pathData = `M ${centerX - radius} ${centerY} A ${radius} ${radius} 0 1 1 ${centerX + radius} ${centerY} A ${radius} ${radius} 0 1 1 ${centerX - radius} ${centerY}`;
+                    } else {
+                        // Draw as arc
+                        pathData = `M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+                    }
+                }
+                
+                segments.push({
+                    path: pathData,
+                    color: colors[index % colors.length],
+                    range,
+                    count: data.count,
+                    vendors: data.vendors,
+                    percentage: Math.round(percentage * 100),
+                    id: `pie-segment-${index}`
+                });
+                
+                currentAngle = endAngle;
+            });
             
             chartContainer.innerHTML = `
-                <div class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <div class="w-4 h-4 bg-green-500 rounded mr-2"></div>
-                            <span class="text-sm font-medium">Low Risk</span>
+                <div class="flex flex-col items-center relative">
+                    <h5 class="text-sm font-medium text-gray-700 mb-3 text-center">Vendor Score Distribution</h5>
+                    <div class="flex items-start space-x-4">
+                        <div class="relative">
+                            <svg width="${pieSize}" height="${pieSize}" class="flex-shrink-0" viewBox="0 0 ${pieSize} ${pieSize}">
+                                ${segments.map(({ path, color, id, vendors, range, count }) => 
+                                    path ? `<path id="${id}" d="${path}" fill="${color}" stroke="white" stroke-width="2" 
+                                              class="cursor-pointer transition-opacity duration-200 hover:opacity-80"
+                                              onmouseenter="showPieTooltip(event, '${range}', ${JSON.stringify(vendors).replace(/"/g, '&quot;')}, ${count})"
+                                              onmouseleave="hidePieTooltip()"
+                                              onmousemove="movePieTooltip(event)"/>` : ''
+                                ).join('')}
+                            </svg>
+                            <div id="pieTooltip" class="absolute hidden bg-gray-800 text-white p-3 rounded-lg shadow-lg z-50 max-w-xs">
+                                <div class="text-sm font-medium mb-2" id="tooltipTitle"></div>
+                                <div class="text-xs space-y-1" id="tooltipContent"></div>
+                            </div>
                         </div>
-                        <span class="text-sm text-gray-600">${distribution.low} (${lowPct}%)</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-green-500 h-2 rounded-full" style="width: ${lowPct}%"></div>
-                    </div>
-                    
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <div class="w-4 h-4 bg-yellow-500 rounded mr-2"></div>
-                            <span class="text-sm font-medium">Medium Risk</span>
+                        <div class="space-y-2 min-w-0">
+                            ${segments.map(({ color, range, count, percentage }) => `
+                                <div class="flex items-center text-sm">
+                                    <div class="w-3 h-3 rounded mr-2 flex-shrink-0" style="background-color: ${color}"></div>
+                                    <span class="font-medium">${range}</span>
+                                    <span class="text-gray-500 ml-2">${count} (${percentage}%)</span>
+                                </div>
+                            `).join('')}
+                            <div class="text-xs text-gray-500 mt-2 pt-2 border-t">
+                                Total: ${total} vendors
+                            </div>
                         </div>
-                        <span class="text-sm text-gray-600">${distribution.medium} (${mediumPct}%)</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-yellow-500 h-2 rounded-full" style="width: ${mediumPct}%"></div>
-                    </div>
-                    
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
-                            <span class="text-sm font-medium">High Risk</span>
-                        </div>
-                        <span class="text-sm text-gray-600">${distribution.high} (${highPct}%)</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-red-500 h-2 rounded-full" style="width: ${highPct}%"></div>
                     </div>
                 </div>
             `;
         }
 
-        function updateActivityChart() {
+        // Pie chart tooltip functions
+        function showPieTooltip(event, range, vendors, count) {
+            const tooltip = document.getElementById('pieTooltip');
+            const title = document.getElementById('tooltipTitle');
+            const content = document.getElementById('tooltipContent');
+            
+            title.textContent = `Score Range: ${range} (${count} vendor${count !== 1 ? 's' : ''})`;
+            
+            // Sort vendors by score within the range (highest first)
+            const sortedVendors = vendors.sort((a, b) => b.score - a.score);
+            
+            content.innerHTML = sortedVendors.map(vendor => 
+                `<div class="flex justify-between items-center">
+                    <span class="truncate pr-2">${vendor.name}</span>
+                    <span class="font-mono text-gray-300">${vendor.score}</span>
+                </div>`
+            ).join('');
+            
+            tooltip.classList.remove('hidden');
+            movePieTooltip(event);
+        }
+        
+        function hidePieTooltip() {
+            const tooltip = document.getElementById('pieTooltip');
+            tooltip.classList.add('hidden');
+        }
+        
+        function movePieTooltip(event) {
+            const tooltip = document.getElementById('pieTooltip');
+            const rect = event.target.closest('svg').getBoundingClientRect();
+            
+            // Position tooltip relative to the pie chart
+            const x = event.clientX - rect.left + 10;
+            const y = event.clientY - rect.top - 10;
+            
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        function updateActivityChart(assessments) {
             const chartContainer = document.getElementById('activityChart');
             
-            // Generate mock activity data for the last 7 days
-            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-            const data = [3, 7, 2, 5, 8, 1, 4]; // Mock data
-            const maxValue = Math.max(...data);
+            // Calculate assessment activity for the past 30 days
+            const now = new Date();
+            const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+            
+            // Create array of the last 30 days
+            const days = [];
+            const activityData = {};
+            
+            for (let i = 29; i >= 0; i--) {
+                const date = new Date(now.getTime() - (i * 24 * 60 * 60 * 1000));
+                const dateStr = date.toISOString().split('T')[0];
+                days.push({
+                    date: dateStr,
+                    label: date.getDate().toString(),
+                    day: date.toLocaleDateString('en-US', { weekday: 'short' })
+                });
+                activityData[dateStr] = 0;
+            }
+            
+            // Count assessments per day
+            if (assessments && assessments.length > 0) {
+                assessments.forEach(assessment => {
+                    const assessmentDate = new Date(assessment.created_at || assessment.assessed_at || assessment.timestamp);
+                    if (assessmentDate >= thirtyDaysAgo) {
+                        const dateStr = assessmentDate.toISOString().split('T')[0];
+                        if (activityData.hasOwnProperty(dateStr)) {
+                            activityData[dateStr]++;
+                        }
+                    }
+                });
+            }
+            
+            const values = Object.values(activityData);
+            const maxValue = Math.max(...values, 1); // Minimum 1 to avoid division by 0
+            const totalAssessments = values.reduce((sum, val) => sum + val, 0);
+            
+            // Show last 7 days for better visibility
+            const last7Days = days.slice(-7);
+            const last7Values = last7Days.map(day => activityData[day.date]);
             
             chartContainer.innerHTML = `
-                <div class="flex items-end justify-between h-48 px-4">
-                    ${days.map((day, index) => {
-                        const height = (data[index] / maxValue) * 100;
-                        return `
-                            <div class="flex flex-col items-center">
-                                <div class="bg-blue-500 rounded-t" style="width: 30px; height: ${height}%; min-height: 4px;"></div>
-                                <span class="text-xs text-gray-600 mt-2">${day}</span>
-                                <span class="text-xs text-gray-500">${data[index]}</span>
-                            </div>
-                        `;
-                    }).join('')}
+                <div class="space-y-2">
+                    <h5 class="text-sm font-medium text-gray-700">Assessment Activity (Last 7 Days)</h5>
+                    <div class="flex items-end justify-between h-32 px-2">
+                        ${last7Days.map((day, index) => {
+                            const height = last7Values[index] === 0 ? 2 : (last7Values[index] / maxValue) * 80 + 10;
+                            const color = last7Values[index] === 0 ? 'bg-gray-300' : 'bg-blue-500';
+                            return `
+                                <div class="flex flex-col items-center flex-1 mx-1">
+                                    <div class="text-xs text-gray-600 mb-1">${last7Values[index]}</div>
+                                    <div class="${color} rounded-t w-full" style="height: ${height}px; min-height: 2px;"></div>
+                                    <div class="text-xs text-gray-500 mt-1 text-center">
+                                        <div>${day.day}</div>
+                                        <div class="text-xs">${day.label}</div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    <div class="text-xs text-gray-500 text-center mt-2">
+                        Total assessments in last 30 days: ${totalAssessments}
+                    </div>
                 </div>
             `;
         }
@@ -3803,28 +4051,55 @@
                 return '<p class="text-sm text-gray-500">No recent assessments</p>';
             }
             
-            return assessments.slice(0, 5).map(assessment => {
-                const riskLevel = assessment.results?.overall_risk_score >= 70 ? 'high' : 
-                                assessment.results?.overall_risk_score >= 40 ? 'medium' : 'low';
+            log(`generateRecentAssessmentsHtml: Processing ${assessments.length} assessments`);
+            
+            // Sort by most recent first
+            const sortedAssessments = assessments.slice().sort((a, b) => {
+                const dateA = new Date(a.created_at || a.assessed_at || a.timestamp || a.completion_date);
+                const dateB = new Date(b.created_at || b.assessed_at || b.timestamp || b.completion_date);
+                return dateB - dateA;
+            });
+            
+            return sortedAssessments.slice(0, 5).map(assessment => {
+                // Try multiple possible paths for the risk score
+                const riskScore = assessment.results?.overall_risk_score || 
+                                assessment.overall_risk_score || 
+                                assessment.risk_score ||
+                                assessment.results?.risk_score ||
+                                assessment.score ||
+                                assessment.results?.score ||
+                                0;
+                                
+                log(`Assessment for ${assessment.vendor_domain || assessment.domain}: score=${riskScore}`);
+                
+                // Convert to 100-point scale if needed
+                const vendorScore = riskScore > 10 ? riskScore : riskScore * 10;
+                
+                // Determine risk level based on score (below 50 is high risk)
+                const riskLevel = vendorScore < 50 ? 'high' : vendorScore < 70 ? 'medium' : 'low';
                 const riskColor = riskLevel === 'high' ? 'text-red-600' : 
                                 riskLevel === 'medium' ? 'text-yellow-600' : 'text-green-600';
+                
+                const vendorDomain = assessment.vendor_domain || assessment.domain || 'Unknown';
+                const vendorName = assessment.vendor_name || assessment.name || vendorDomain;
+                const assessmentDate = new Date(assessment.created_at || assessment.assessed_at || assessment.timestamp || assessment.completion_date);
                 
                 return `
                     <div class="flex items-center justify-between py-2 border-b last:border-b-0">
                         <div class="flex items-center space-x-3">
                             <div class="flex-shrink-0">
-                                <img src="${getVendorLogoUrl(assessment.vendor_domain)}" 
-                                     alt="${assessment.vendor_name || assessment.vendor_domain} logo" 
+                                <img src="${getVendorLogoUrl(vendorDomain)}" 
+                                     alt="${vendorName} logo" 
                                      class="w-8 h-8 rounded object-contain bg-white border border-gray-200"
                                      onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI0IiBmaWxsPSIjRjNGNEY2Ii8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNCIgcj0iNCIgZmlsbD0iIzlDQTNBRiIvPgogIDxyZWN0IHg9IjEwIiB5PSIyMCIgd2lkdGg9IjEyIiBoZWlnaHQ9IjIiIHJ4PSIxIiBmaWxsPSIjOUNBM0FGIi8+CiAgPHJlY3QgeD0iOCIgeT0iMjQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIyIiByeD0iMSIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K'; this.onerror=null;">
                             </div>
                             <div>
-                                <div class="text-sm font-medium">${assessment.vendor_name || assessment.vendor_domain}</div>
-                                <div class="text-xs text-gray-500">${new Date(assessment.created_at).toLocaleDateString()}</div>
+                                <div class="text-sm font-medium">${vendorName}</div>
+                                <div class="text-xs text-gray-500">${assessmentDate.toLocaleDateString()}</div>
                             </div>
                         </div>
                         <div class="text-right">
-                            <div class="text-sm font-medium ${riskColor}">${assessment.results?.overall_risk_score || 0}%</div>
+                            <div class="text-sm font-medium ${riskColor}">${Math.round(vendorScore)}/100</div>
                             <div class="text-xs text-gray-500 capitalize">${riskLevel} risk</div>
                         </div>
                     </div>
@@ -3882,7 +4157,7 @@
 
         async function generateExecutiveReport() {
             try {
-                log('Generating executive summary report...');
+                log('Generating executive summary PDF report...');
                 
                 const includeDistribution = document.getElementById('includeRiskDistribution').checked;
                 const includeTrends = document.getElementById('includeTrendAnalysis').checked;
@@ -3894,15 +4169,16 @@
                     throw new Error('Failed to get dashboard data');
                 }
                 
-                // Generate the executive report
-                const reportContent = generateExecutiveReportContent(dashboardResponse.data, {
+                // Generate the executive report as PDF-optimized HTML
+                const reportContent = generateExecutivePDFContent(dashboardResponse.data, {
                     includeDistribution,
                     includeTrends,
                     includeRecommendations
                 });
                 
-                downloadReportFile(reportContent, 'Executive_Risk_Summary.html');
-                log('Executive report generated successfully', 'success');
+                // Create PDF using browser's print functionality
+                generatePDFFromHTML(reportContent, 'Executive_Risk_Summary_Report.pdf');
+                log('Executive PDF report generated successfully', 'success');
                 
             } catch (error) {
                 log(`Failed to generate executive report: ${error.message}`, 'error');
@@ -3918,6 +4194,7 @@
                     .map(option => option.value);
                 const includeCompliance = document.getElementById('includeComplianceDetails').checked;
                 const includeTechnical = document.getElementById('includeTechnicalFindings').checked;
+                const timePeriod = document.getElementById('reportTimePeriod').value;
                 
                 if (selectedVendors.length === 0) {
                     alert('Please select at least one vendor');
@@ -3930,24 +4207,297 @@
                     throw new Error('Failed to get assessment data');
                 }
                 
-                // Filter assessments based on selection
-                let assessments = historyResponse.assessments;
+                // Filter assessments based on time period
+                let filteredAssessments = filterAssessmentsByTime(historyResponse.assessments, timePeriod);
+                
+                // Filter assessments based on vendor selection
                 if (!selectedVendors.includes('all')) {
-                    assessments = assessments.filter(a => selectedVendors.includes(a.vendor_domain));
+                    filteredAssessments = filteredAssessments.filter(a => selectedVendors.includes(a.vendor_domain));
+                }
+                
+                if (filteredAssessments.length === 0) {
+                    alert('No assessments found for the selected criteria');
+                    return;
                 }
                 
                 // Generate the detailed report
-                const reportContent = generateDetailedReportContent(assessments, {
+                const reportContent = generateDetailedReportContent(filteredAssessments, {
                     includeCompliance,
-                    includeTechnical
+                    includeTechnical,
+                    timePeriod
                 });
                 
-                downloadReportFile(reportContent, 'Detailed_Vendor_Report.html');
+                const fileName = `Detailed_Vendor_Report_${timePeriod}_${new Date().toISOString().split('T')[0]}.html`;
+                downloadReportFile(reportContent, fileName);
                 log('Detailed report generated successfully', 'success');
                 
             } catch (error) {
                 log(`Failed to generate detailed report: ${error.message}`, 'error');
                 alert(`Failed to generate detailed report: ${error.message}`);
+            }
+        }
+
+        // Helper function to filter assessments by time period
+        function filterAssessmentsByTime(assessments, timePeriod) {
+            const now = new Date();
+            let cutoffDate;
+            
+            switch (timePeriod) {
+                case 'last_7_days':
+                    cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'last_30_days':
+                    cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'last_90_days':
+                    cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'last_year':
+                    cutoffDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'custom':
+                    const startDate = document.getElementById('customStartDate').value;
+                    const endDate = document.getElementById('customEndDate').value;
+                    if (!startDate || !endDate) {
+                        alert('Please select both start and end dates for custom range');
+                        return assessments;
+                    }
+                    return assessments.filter(assessment => {
+                        const assessmentDate = new Date(assessment.assessed_at || assessment.timestamp);
+                        return assessmentDate >= new Date(startDate) && assessmentDate <= new Date(endDate);
+                    });
+                default:
+                    return assessments; // Return all if no filter
+            }
+            
+            return assessments.filter(assessment => {
+                const assessmentDate = new Date(assessment.assessed_at || assessment.timestamp);
+                return assessmentDate >= cutoffDate;
+            });
+        }
+
+        // Helper function to generate PDF-optimized content for executive report
+        function generateExecutivePDFContent(dashboardData, options) {
+            const currentDate = new Date().toLocaleDateString();
+            
+            let content = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Executive Risk Summary Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007acc; padding-bottom: 20px; }
+                        .section { margin-bottom: 25px; }
+                        .section h2 { color: #007acc; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+                        .metric { display: inline-block; margin: 10px 20px; text-align: center; }
+                        .metric-value { font-size: 24px; font-weight: bold; color: #007acc; }
+                        .metric-label { font-size: 12px; color: #666; }
+                        .risk-high { color: #dc3545; }
+                        .risk-medium { color: #fd7e14; }
+                        .risk-low { color: #28a745; }
+                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #f8f9fa; }
+                        .recommendations { background-color: #f8f9fa; padding: 15px; border-left: 4px solid #007acc; }
+                        @media print { body { margin: 0; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>Executive Risk Summary Report</h1>
+                        <p>Generated on ${currentDate}</p>
+                    </div>
+                    
+                    <div class="section">
+                        <h2>Risk Overview</h2>
+                        <div class="metric">
+                            <div class="metric-value">${dashboardData.totalVendors || 0}</div>
+                            <div class="metric-label">Total Vendors</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value risk-high">${dashboardData.highRiskCount || 0}</div>
+                            <div class="metric-label">High Risk</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value risk-medium">${dashboardData.mediumRiskCount || 0}</div>
+                            <div class="metric-label">Medium Risk</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value risk-low">${dashboardData.lowRiskCount || 0}</div>
+                            <div class="metric-label">Low Risk</div>
+                        </div>
+                    </div>
+            `;
+            
+            if (options.includeDistribution && dashboardData.riskDistribution) {
+                content += `
+                    <div class="section">
+                        <h2>Risk Distribution</h2>
+                        <table>
+                            <tr><th>Risk Level</th><th>Count</th><th>Percentage</th></tr>
+                `;
+                
+                const total = dashboardData.totalVendors || 1;
+                Object.entries(dashboardData.riskDistribution).forEach(([level, count]) => {
+                    const percentage = ((count / total) * 100).toFixed(1);
+                    content += `<tr><td>${level}</td><td>${count}</td><td>${percentage}%</td></tr>`;
+                });
+                
+                content += `</table></div>`;
+            }
+            
+            if (options.includeTrends && dashboardData.trends) {
+                content += `
+                    <div class="section">
+                        <h2>Risk Trends</h2>
+                        <p>Risk assessment trends over the past 30 days show patterns in vendor risk levels.</p>
+                    </div>
+                `;
+            }
+            
+            if (options.includeRecommendations) {
+                content += `
+                    <div class="section">
+                        <h2>Key Recommendations</h2>
+                        <div class="recommendations">
+                            <ul>
+                                <li>Priority attention should be given to ${dashboardData.highRiskCount || 0} high-risk vendors</li>
+                                <li>Regular reassessment of ${dashboardData.mediumRiskCount || 0} medium-risk vendors is recommended</li>
+                                <li>Maintain monitoring of low-risk vendors for any changes in risk profile</li>
+                                <li>Implement continuous monitoring for real-time risk assessment updates</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content += `</body></html>`;
+            return content;
+        }
+
+        // Helper function to generate PDF from HTML content
+        function generatePDFFromHTML(htmlContent, fileName) {
+            // Create a new window for printing
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            
+            // Wait for content to load, then trigger print
+            printWindow.onload = function() {
+                setTimeout(() => {
+                    printWindow.print();
+                    printWindow.close();
+                }, 100);
+            };
+        }
+
+        // Update the detailed report content generator to include time period info
+        function generateDetailedReportContent(assessments, options) {
+            const currentDate = new Date().toLocaleDateString();
+            const timePeriodText = getTimePeriodText(options.timePeriod);
+            
+            let content = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Detailed Vendor Report - ${timePeriodText}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; color: #333; line-height: 1.6; }
+                        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007acc; padding-bottom: 20px; }
+                        .vendor-section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; }
+                        .vendor-header { background-color: #f8f9fa; padding: 10px; margin: -20px -20px 20px -20px; }
+                        .risk-high { color: #dc3545; font-weight: bold; }
+                        .risk-medium { color: #fd7e14; font-weight: bold; }
+                        .risk-low { color: #28a745; font-weight: bold; }
+                        .finding { margin: 10px 0; padding: 10px; background-color: #f8f9fa; border-left: 4px solid #007acc; }
+                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #f8f9fa; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>Detailed Vendor Report</h1>
+                        <p>Time Period: ${timePeriodText}</p>
+                        <p>Generated on ${currentDate}</p>
+                        <p>Total Assessments: ${assessments.length}</p>
+                    </div>
+            `;
+            
+            assessments.forEach(assessment => {
+                const riskClass = assessment.overall_risk_score > 7 ? 'risk-high' : 
+                                 assessment.overall_risk_score > 4 ? 'risk-medium' : 'risk-low';
+                
+                content += `
+                    <div class="vendor-section">
+                        <div class="vendor-header">
+                            <h2>${assessment.vendor_domain}</h2>
+                            <p>Risk Score: <span class="${riskClass}">${assessment.overall_risk_score}/10</span></p>
+                            <p>Assessment Date: ${new Date(assessment.assessed_at || assessment.timestamp).toLocaleDateString()}</p>
+                        </div>
+                `;
+                
+                if (options.includeTechnical && assessment.technical_findings) {
+                    content += `
+                        <h3>Technical Findings</h3>
+                        <table>
+                            <tr><th>Category</th><th>Score</th><th>Details</th></tr>
+                    `;
+                    
+                    Object.entries(assessment.technical_findings).forEach(([category, data]) => {
+                        if (typeof data === 'object' && data.score !== undefined) {
+                            content += `<tr><td>${category}</td><td>${data.score}</td><td>${data.details || 'N/A'}</td></tr>`;
+                        }
+                    });
+                    
+                    content += `</table>`;
+                }
+                
+                if (options.includeCompliance && assessment.regulations) {
+                    content += `
+                        <h3>Compliance Standards</h3>
+                        <ul>
+                    `;
+                    assessment.regulations.forEach(reg => {
+                        content += `<li>${reg}</li>`;
+                    });
+                    content += `</ul>`;
+                }
+                
+                content += `</div>`;
+            });
+            
+            content += `</body></html>`;
+            return content;
+        }
+
+        // Helper function to get human-readable time period text
+        function getTimePeriodText(timePeriod) {
+            switch (timePeriod) {
+                case 'last_7_days': return 'Last 7 Days';
+                case 'last_30_days': return 'Last 30 Days';
+                case 'last_90_days': return 'Last 90 Days';
+                case 'last_year': return 'Last Year';
+                case 'custom': 
+                    const start = document.getElementById('customStartDate').value;
+                    const end = document.getElementById('customEndDate').value;
+                    return `Custom Range (${start} to ${end})`;
+                default: return 'All Time';
+            }
+        }
+
+        // Show/hide custom date inputs based on time period selection
+        function handleTimePeriodChange() {
+            const timePeriod = document.getElementById('reportTimePeriod').value;
+            const customDateInputs = document.getElementById('customDateInputs');
+            
+            if (timePeriod === 'custom') {
+                customDateInputs.style.display = 'block';
+            } else {
+                customDateInputs.style.display = 'none';
             }
         }
 
@@ -4024,7 +4574,7 @@
             }
         }
 
-        function generateExecutiveReportContent(data, options) {
+        function generateExecutiveReportContentOld(data, options) {
             return `
 <!DOCTYPE html>
 <html>
@@ -5305,6 +5855,24 @@
         document.addEventListener('DOMContentLoaded', function() {
             log('Combined UI interface initialized', 'success');
             showTab('single');
+            
+            // Add event listener for time period dropdown
+            const timePeriodSelect = document.getElementById('reportTimePeriod');
+            if (timePeriodSelect) {
+                timePeriodSelect.addEventListener('change', function() {
+                    const customDateInputs = document.getElementById('customDateInputs');
+                    if (this.value === 'custom') {
+                        customDateInputs.style.display = 'block';
+                        // Set default dates
+                        const today = new Date();
+                        const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+                        document.getElementById('customStartDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+                        document.getElementById('customEndDate').value = today.toISOString().split('T')[0];
+                    } else {
+                        customDateInputs.style.display = 'none';
+                    }
+                });
+            }
         });
     </script>
 </body>
