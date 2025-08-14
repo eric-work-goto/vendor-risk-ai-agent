@@ -878,6 +878,32 @@
         // Make function globally available immediately
         window.toggleAdvanced = toggleAdvanced;
         
+        // Toggle data type dropdown function
+        function toggleDataTypeDropdown(dropdownId) {
+            const dropdown = document.getElementById(dropdownId);
+            const icon = document.getElementById(dropdownId + '-icon');
+            
+            if (!dropdown || !icon) {
+                console.error('Data type dropdown elements not found:', dropdownId);
+                return;
+            }
+            
+            if (dropdown.classList.contains('hidden')) {
+                dropdown.classList.remove('hidden');
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+                icon.parentElement.setAttribute('aria-expanded', 'true');
+            } else {
+                dropdown.classList.add('hidden');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+                icon.parentElement.setAttribute('aria-expanded', 'false');
+            }
+        }
+        
+        // Make function globally available
+        window.toggleDataTypeDropdown = toggleDataTypeDropdown;
+        
         // Start new assessment function - define early to ensure availability
         async function startNewAssessment() {
             console.log('startNewAssessment called'); // Debug log
@@ -2230,26 +2256,35 @@
                             <i class="fas fa-database mr-2"></i>Data Types Utilized by Vendor
                         </h6>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            ${dataTypes.map(dataType => `
+                            ${dataTypes.map((dataType, index) => `
                                 <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                                     <div class="flex items-center justify-between mb-3">
-                                        <h6 class="font-medium text-gray-800">${dataType.category}</h6>
-                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                        <button 
+                                            class="flex items-center text-left font-medium text-gray-800 hover:text-blue-600 transition-colors duration-200 focus:outline-none" 
+                                            onclick="toggleDataTypeDropdown('datatype-${index}')"
+                                            aria-expanded="false"
+                                        >
+                                            <i class="fas fa-chevron-right mr-2 transform transition-transform duration-200" id="datatype-${index}-icon"></i>
+                                            ${dataType.category}
+                                        </button>
+                                        <span class="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-medium ${
                                             dataType.risk === 'high' ? 'bg-red-100 text-red-800' :
                                             dataType.risk === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                                             'bg-green-100 text-green-800'
-                                        }">
+                                        }" style="min-width: 80px; text-align: center;">
                                             ${dataType.risk.toUpperCase()} RISK
                                         </span>
                                     </div>
-                                    <ul class="text-sm text-gray-600 space-y-1">
-                                        ${dataType.items.map(item => `
-                                            <li class="flex items-center">
-                                                <span class="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>
-                                                ${item}
-                                            </li>
-                                        `).join('')}
-                                    </ul>
+                                    <div id="datatype-${index}" class="hidden">
+                                        <ul class="text-sm text-gray-600 space-y-1 pl-6">
+                                            ${dataType.items.map(item => `
+                                                <li class="flex items-center">
+                                                    <span class="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>
+                                                    ${item}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
