@@ -4135,11 +4135,10 @@ async def scan_ai_services(vendor_domain: str, vendor_name: str = None) -> Dict[
                     ai_services.append(service)
             
             # Determine AI maturity level for all domains (known and unknown)
-            ai_maturity = "Advanced" if len(ai_services) >= 3 and governance_score >= 80 else \
-                         "Intermediate" if len(ai_services) >= 2 and offers_ai else \
-                         "Basic" if offers_ai else "No AI Services"
-        else:
-            ai_maturity = known_ai_capabilities[vendor_domain.lower()].get("ai_maturity_level", "No AI Services")
+            if vendor_domain.lower() not in known_ai_capabilities:
+                ai_maturity = "Advanced" if len(ai_services) >= 3 and governance_score >= 80 else \
+                             "Intermediate" if len(ai_services) >= 2 and offers_ai else \
+                             "Basic" if offers_ai else "No AI Services"
         
         # AI governance and ethics
         ai_governance = None
@@ -4634,173 +4633,28 @@ async def scan_data_flows(vendor_domain: str, vendor_name: str = None) -> Dict[s
 
 # Background assessment functions
 async def run_real_assessment(assessment_id: str, request_data: CreateAssessmentRequest):
-    """Run real assessment using the enhanced assessment engine"""
+    """Run real assessment using standard assessment methods (no AI)"""
     try:
         vendor_domain = request_data.vendor_domain
         vendor_name = vendor_domain.split('.')[0].title()
         
-        logger.info(f"🚀 Starting enhanced real assessment for {vendor_domain}")
+        logger.info(f"� Starting standard real assessment for {vendor_domain}")
         
         # Update progress
         assessment_results[assessment_id]["progress"] = 10
-        assessment_results[assessment_id]["status"] = "initializing_enhanced_assessment"
+        assessment_results[assessment_id]["status"] = "initializing_standard_assessment"
         
-        # Use enhanced assessment engine for comprehensive real analysis
-        from .enhanced_assessment_engine import enhanced_assessment_engine
+        # Run standard comprehensive assessment using the comprehensive function
+        await run_comprehensive_real_assessment(assessment_id, request_data)
         
-        # Configure assessment parameters
-        assessment_config = {
-            "vendor_domain": vendor_domain,
-            "vendor_name": vendor_name,
-            "assessment_mode": request_data.assessment_mode,
-            "data_sensitivity": request_data.data_sensitivity,
-            "business_criticality": request_data.business_criticality,
-            "regulations": request_data.regulations or ["gdpr", "soc2", "iso27001"],
-            "enable_deep_scan": True,  # Always use deep scan for real assessments
-            "timeout": 300  # 5 minute timeout for enhanced assessment
-        }
+        logger.info(f"✅ Standard assessment completed for {vendor_domain}")
+        return
         
-        # Update progress
-        assessment_results[assessment_id]["progress"] = 20
-        assessment_results[assessment_id]["status"] = "running_enhanced_security_analysis"
-        
-        # Run enhanced assessment with AI analysis
-        try:
-            enhanced_result = await enhanced_assessment_engine(assessment_config)
-            
-            # Update progress
-            assessment_results[assessment_id]["progress"] = 60
-            assessment_results[assessment_id]["status"] = "ai_powered_analysis_integration"
-            
-            # If enhanced assessment provides raw data, use AI to analyze it
-            if enhanced_result.get("raw_scan_data"):
-                ai_assessment_results = await ai_powered_assessment_analysis(
-                    vendor_domain, vendor_name, enhanced_result["raw_scan_data"], assessment_config
-                )
-                
-                # Merge enhanced assessment with AI analysis
-                processed_results = {
-                    "vendor_name": vendor_name,
-                    "vendor_domain": vendor_domain,
-                    "overall_score": max(enhanced_result.get("overall_score", 75), 
-                                       100 - ai_assessment_results.get('overall_risk_score', 25)),
-                    "risk_level": ai_assessment_results.get("risk_level", enhanced_result.get("risk_level", "medium")),
-                    "assessment_type": "enhanced_ai_powered_assessment",
-                    "assessment_mode": request_data.assessment_mode,
-                    "enhanced_analysis": enhanced_result,
-                    "ai_analysis": ai_assessment_results,
-                    "confidence_score": ai_assessment_results.get('confidence_score', 85),
-                    "analysis_method": f"enhanced_{ai_assessment_results.get('analysis_method', 'hybrid')}",
-                    "detailed_assessments": {
-                        "security": ai_assessment_results.get('security_assessment', {}),
-                        "privacy": ai_assessment_results.get('privacy_assessment', {}),
-                        "operational": ai_assessment_results.get('operational_assessment', {}),
-                        "ai_governance": ai_assessment_results.get('ai_governance_assessment', {}),
-                        "compliance": ai_assessment_results.get('compliance_assessment', {})
-                    },
-                    "recommendations": ai_assessment_results.get('recommendations', {}),
-                    "key_findings": ai_assessment_results.get('key_findings', []),
-                    "executive_summary": ai_assessment_results.get('executive_summary', ''),
-                    "next_steps": ai_assessment_results.get('next_steps', []),
-                    "completed_at": datetime.now().isoformat()
-                }
-                
-                logger.info(f"🤖 Enhanced assessment with AI analysis completed for {vendor_domain}")
-            else:
-                # Fallback to original enhanced results
-                processed_results = {
-                    "vendor_name": vendor_name,
-                    "vendor_domain": vendor_domain,
-                    "overall_score": enhanced_result.get("overall_score", 75),
-                    "risk_level": enhanced_result.get("risk_level", "medium"),
-                    "assessment_type": "enhanced_real_assessment",
-                    "assessment_mode": request_data.assessment_mode,
-                    "enhanced_analysis": enhanced_result,
-                    "completed_at": datetime.now().isoformat()
-                }
-        
-        except Exception as e:
-            logger.warning(f"⚠️ Enhanced assessment failed for {vendor_domain}, using AI-only analysis: {str(e)}")
-            
-            # Fallback to AI-only analysis with basic data collection
-            assessment_results[assessment_id]["progress"] = 40
-            assessment_results[assessment_id]["status"] = "ai_fallback_analysis"
-            
-            # Collect basic data for AI analysis
-            collected_data = {}
-            try:
-                collected_data["breach_scan"] = await scan_data_breaches(vendor_domain, vendor_name)
-            except:
-                collected_data["breach_scan"] = {"breaches_found": 0, "error": "scan_failed"}
-                
-            try:
-                collected_data["privacy_scan"] = await scan_privacy_practices(vendor_domain, vendor_name)
-            except:
-                collected_data["privacy_scan"] = {"compliance_score": 50, "error": "scan_failed"}
-                
-            try:
-                collected_data["ai_scan"] = await scan_ai_services(vendor_domain, vendor_name)
-            except:
-                collected_data["ai_scan"] = {"offers_ai_services": False, "error": "scan_failed"}
-            
-            # Run AI analysis on collected data
-            ai_assessment_results = await ai_powered_assessment_analysis(
-                vendor_domain, vendor_name, collected_data, assessment_config
-            )
-            
-            processed_results = {
-                "vendor_name": vendor_name,
-                "vendor_domain": vendor_domain,
-                "overall_score": 100 - ai_assessment_results.get('overall_risk_score', 75),
-                "risk_level": ai_assessment_results.get("risk_level", "medium"),
-                "assessment_type": "ai_powered_fallback_assessment",
-                "assessment_mode": request_data.assessment_mode,
-                "ai_analysis": ai_assessment_results,
-                "confidence_score": ai_assessment_results.get('confidence_score', 75),
-                "analysis_method": f"fallback_{ai_assessment_results.get('analysis_method', 'ai_powered')}",
-                "detailed_assessments": {
-                    "security": ai_assessment_results.get('security_assessment', {}),
-                    "privacy": ai_assessment_results.get('privacy_assessment', {}),
-                    "operational": ai_assessment_results.get('operational_assessment', {}),
-                    "ai_governance": ai_assessment_results.get('ai_governance_assessment', {}),
-                    "compliance": ai_assessment_results.get('compliance_assessment', {})
-                },
-                "recommendations": ai_assessment_results.get('recommendations', {}),
-                "key_findings": ai_assessment_results.get('key_findings', []),
-                "executive_summary": ai_assessment_results.get('executive_summary', ''),
-                "next_steps": ai_assessment_results.get('next_steps', []),
-                "completed_at": datetime.now().isoformat()
-            }
-        
-        # Update progress
-        assessment_results[assessment_id]["progress"] = 80
-        assessment_results[assessment_id]["status"] = "processing_enhanced_results"
-        
-        # Convert to user-friendly format
-        processed_results["assessment_mode"] = request_data.assessment_mode
-        user_friendly_results = convert_to_user_friendly(processed_results)
-        
-        # Final update
+    except Exception as e:
+        logger.error(f"❌ Real assessment failed for {assessment_id}: {str(e)}")
+        assessment_results[assessment_id]["status"] = "failed"
+        assessment_results[assessment_id]["error"] = str(e)
         assessment_results[assessment_id]["progress"] = 100
-        assessment_results[assessment_id]["status"] = "completed"
-        assessment_results[assessment_id]["results"] = user_friendly_results
-        
-        # Update storage
-        if assessment_id in assessment_storage:
-            assessment_storage[assessment_id]["results"] = user_friendly_results
-            assessment_storage[assessment_id]["status"] = "completed"
-            assessment_storage[assessment_id]["completed_at"] = datetime.now().isoformat()
-        
-        logger.info(f"🎉 Enhanced real assessment completed for {vendor_domain}")
-        
-        # Send completion email if requested
-        if request_data.requester_email:
-            try:
-                await send_assessment_completion_email(assessment_id, request_data.requester_email, user_friendly_results)
-            except Exception as e:
-                logger.warning(f"Failed to send completion email: {str(e)}")
-        
-        return {"assessment_id": assessment_id, "status": "completed"}
         
     except Exception as e:
         logger.error(f"❌ Enhanced real assessment failed for {assessment_id}: {str(e)}")
@@ -5094,50 +4948,19 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             "regulations": request_data.regulations or ["gdpr", "soc2", "iso27001"]
         }
         
-        # Perform AI-powered comprehensive analysis
-        try:
-            ai_assessment_results = await ai_powered_assessment_analysis(
-                vendor_domain, vendor_name, collected_data, assessment_config
-            )
-            logger.info(f"🤖 AI-powered analysis completed for {vendor_domain} - risk level: {ai_assessment_results.get('risk_level', 'unknown')}")
-            
-            # Use AI results as the primary assessment
-            real_results = {
-                "vendor_name": vendor_name,
-                "vendor_domain": vendor_domain,
-                "overall_score": 100 - ai_assessment_results.get('overall_risk_score', 75),  # Convert risk to score
-                "risk_level": ai_assessment_results.get('risk_level', 'medium'),
-                "assessment_mode": request_data.assessment_mode,
-                "ai_analysis": ai_assessment_results,
-                "confidence_score": ai_assessment_results.get('confidence_score', 85),
-                "analysis_method": ai_assessment_results.get('analysis_method', 'ai_powered'),
-                "detailed_assessments": {
-                    "security": ai_assessment_results.get('security_assessment', {}),
-                    "privacy": ai_assessment_results.get('privacy_assessment', {}),
-                    "operational": ai_assessment_results.get('operational_assessment', {}),
-                    "ai_governance": ai_assessment_results.get('ai_governance_assessment', {}),
-                    "compliance": ai_assessment_results.get('compliance_assessment', {})
-                },
-                "recommendations": ai_assessment_results.get('recommendations', {}),
-                "key_findings": ai_assessment_results.get('key_findings', []),
-                "executive_summary": ai_assessment_results.get('executive_summary', ''),
-                "next_steps": ai_assessment_results.get('next_steps', [])
-            }
-            
-        except Exception as e:
-            logger.warning(f"⚠️ AI-powered analysis failed for {vendor_domain}, falling back to standard analysis: {str(e)}")
-            # Fallback to original assessment generation
-            real_results = await _generate_real_assessment_results(
-                vendor_domain=vendor_domain,
-                vendor_name=vendor_name,
-                breach_data=breach_scan_result,
-                privacy_data=privacy_scan_result,
-                ai_data=ai_scan_result,
-                compliance_data=compliance_discovery,
-                trust_center_data=trust_center_info,
-                data_flow_data=data_flow_result,
-                assessment_mode=request_data.assessment_mode
-            )
+        # Generate standard assessment results using collected data
+        real_results = await _generate_real_assessment_results(
+            vendor_domain=vendor_domain,
+            vendor_name=vendor_name,
+            breach_data=breach_scan_result,
+            privacy_data=privacy_scan_result,
+            ai_data=ai_scan_result,
+            compliance_data=compliance_discovery,
+            trust_center_data=trust_center_info,
+            data_flow_data=data_flow_result,
+            assessment_mode=request_data.assessment_mode
+        )
+        logger.info(f"✅ Standard assessment completed for {vendor_domain} - risk level: {real_results.get('risk_level', 'unknown')}")
         
         # Update progress - generating assessment results
         assessment_results[assessment_id]["progress"] = 75
