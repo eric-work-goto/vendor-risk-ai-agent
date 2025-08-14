@@ -1,0 +1,18 @@
+# Instructions for Pushing to GitHub
+
+After creating your GitHub repository, run these commands:
+
+# Add your GitHub repository as the remote origin
+# Replace YOUR_USERNAME and YOUR_REPO_NAME with your actual values
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+
+# Rename the main branch to 'main' (GitHub's default)
+git branch -M main
+
+# Push your code to GitHub
+git push -u origin main
+
+# Example with a hypothetical repository:
+# git remote add origin https://github.com/eleeds/vendor-risk-ai-agent.git
+# git branch -M main
+# git push -u origin main
