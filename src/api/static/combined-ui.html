@@ -151,40 +151,6 @@
                                         </div>
                                     </div>
                                     
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Data Sensitivity Level</label>
-                                        <select id="dataSensitivity" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                            <option value="public">Public</option>
-                                            <option value="internal" selected>Internal</option>
-                                            <option value="confidential">Confidential</option>
-                                            <option value="restricted">Restricted</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Business Criticality</label>
-                                        <select id="businessCriticality" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                            <option value="low">Low</option>
-                                            <option value="medium" selected>Medium</option>
-                                            <option value="high">High</option>
-                                            <option value="critical">Critical</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="flex items-center">
-                                        <input type="checkbox" id="autoTrustCenter" class="mr-3 text-blue-600" checked>
-                                        <label class="text-sm text-gray-700">
-                                            Automatically request trust center documents
-                                        </label>
-                                    </div>
-                                    
-                                    <div class="flex items-center">
-                                        <input type="checkbox" id="aiComplianceSearch" class="mr-3 text-blue-600">
-                                        <label class="text-sm text-gray-700">
-                                            <i class="fas fa-search mr-1"></i>Enable AI compliance documentation search (GDPR, HIPAA, PCI-DSS, CCPA)
-                                        </label>
-                                    </div>
-                                    
                                     <!-- Assessment Mode Selection -->
                                     <div class="border-t pt-4 mt-4">
                                         <label class="block text-sm font-medium text-gray-700 mb-3">
@@ -208,14 +174,6 @@
                                                 </div>
                                             </label>
                                         </div>
-                                    </div>
-                                    
-                                    <div class="flex items-center">
-                                        <input type="checkbox" id="enhancedAssessment" class="mr-3 text-blue-600" checked>
-                                        <label class="text-sm text-gray-700">
-                                            <span class="font-medium">Enhanced Assessment</span>
-                                            <span class="text-xs text-gray-500 block">Uses industry frameworks: MITRE CTSA, CWRAF, CWSS, CVSS, Open FAIR</span>
-                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -390,7 +348,7 @@
                 <!-- Enhanced Assessment Configuration -->
                 <div class="mb-6 p-4 bg-gray-50 rounded-lg">
                     <h4 class="font-semibold text-gray-800 mb-3">Assessment Configuration</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Assessment Mode</label>
                             <select id="bulkAssessmentMode" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -399,26 +357,6 @@
                                 <option value="business_risk">Business Risk Assessment</option>
                             </select>
                             <p class="text-xs text-gray-600 mt-1">Choose assessment focus and methodology</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Data Sensitivity</label>
-                            <select id="bulkDataSensitivity" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="">Select Data Sensitivity</option>
-                                <option value="public">Public</option>
-                                <option value="internal">Internal</option>
-                                <option value="confidential">Confidential</option>
-                                <option value="restricted">Restricted</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Business Criticality</label>
-                            <select id="bulkBusinessCriticality" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="">Select Business Criticality</option>
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                                <option value="critical">Critical</option>
-                            </select>
                         </div>
                     </div>
                     
@@ -459,15 +397,6 @@
                                 <span class="text-sm">FedRAMP</span>
                             </label>
                         </div>
-                    </div>
-                    
-                    <!-- Trust Center Options -->
-                    <div class="mt-4">
-                        <label class="flex items-center">
-                            <input type="checkbox" id="bulkAutoTrustCenter" class="mr-2">
-                            <span class="text-sm font-medium text-gray-700">Enable automatic Trust Center document access</span>
-                        </label>
-                        <p class="text-xs text-gray-600 mt-1">Automatically attempt to access vendor trust centers and download compliance documents</p>
                     </div>
                     
                     <div class="mt-6 flex gap-3">
@@ -1028,26 +957,20 @@
             const regulations = Array.from(document.querySelectorAll('input[name="regulations"]:checked'))
                 .map(cb => cb.value);
             
-            // Get other form data
-            const dataSensitivity = document.getElementById('dataSensitivity').value;
-            const businessCriticality = document.getElementById('businessCriticality').value;
-            const autoTrustCenter = document.getElementById('autoTrustCenter').checked;
-            const enhancedAssessment = document.getElementById('enhancedAssessment').checked;
-            
             // Get assessment mode
             const assessmentMode = document.querySelector('input[name="assessmentMode"]:checked').value;
             
             try {
-                log(`Starting ${enhancedAssessment ? 'enhanced' : 'standard'} ${assessmentMode.replace('_', ' ')} assessment for ${domain}...`);
+                log(`Starting enhanced ${assessmentMode.replace('_', ' ')} assessment for ${domain}...`);
                 
                 const response = await apiCall('/api/v1/assessments', 'POST', {
                     vendor_domain: domain,
                     requester_email: email,
                     regulations: regulations,
-                    data_sensitivity: dataSensitivity,
-                    business_criticality: businessCriticality,
-                    auto_trust_center: autoTrustCenter,
-                    enhanced_assessment: enhancedAssessment,
+                    data_sensitivity: 'internal', // Default value
+                    business_criticality: 'medium', // Default value
+                    auto_trust_center: true, // Always enabled
+                    enhanced_assessment: true, // Always enabled
                     assessment_mode: assessmentMode
                 });
                 
@@ -2495,17 +2418,12 @@
         function viewDocument(url) {
             console.log('Attempting to view document:', url);
             
-            // Check if this is a demo URL
-            if (url.includes('demo') || url.includes('example') || !url.startsWith('http')) {
-                alert(`📄 Document Preview\n\nThis is a demonstration of AI document discovery. The key information from this document is already summarized in the "Key Data Flow Information Summary" section above.\n\nIn a real implementation, this would open: ${url}`);
-                return;
-            }
-            
-            // Try to open real URLs, but handle potential failures
+            // Open the vendor's website URL directly
             try {
                 window.open(url, '_blank');
             } catch (error) {
-                alert(`📄 Document Access\n\nUnable to open document at: ${url}\n\nThe key information from this document is summarized in the "Key Data Flow Information Summary" section above.`);
+                console.error('Error opening document:', error);
+                alert(`📄 Document Access\n\nUnable to open: ${url}\n\nPlease check if the URL is accessible or try opening it manually in your browser.`);
             }
         }
 
@@ -2554,13 +2472,7 @@
 
         // AI Compliance Documentation Search Function
         function renderComplianceDocumentationSection(vendorDomain) {
-            // Check if AI compliance search is enabled in advanced options
-            const aiComplianceSearchEnabled = document.getElementById('aiComplianceSearch')?.checked;
-            
-            if (!aiComplianceSearchEnabled) {
-                return ''; // Don't render the section if not enabled
-            }
-            
+            // Always enabled - no need to check for checkbox
             console.log('AI Compliance Documentation Search for:', vendorDomain);
             
             // Generate compliance documentation discovery data
@@ -2831,17 +2743,12 @@
         function viewComplianceDocument(url, standardName) {
             console.log('Attempting to view compliance document:', url, 'for standard:', standardName);
             
-            // Check if this is a demo URL
-            if (url.includes('demo') || url.includes('example') || !url.startsWith('http')) {
-                alert(`📋 ${standardName} Compliance Document\n\nThis is a demonstration of AI compliance documentation discovery.\n\nDocument: ${url}\n\nIn a real implementation, this would open the actual compliance document. The system has successfully identified relevant ${standardName} documentation on the vendor's website.`);
-                return;
-            }
-            
-            // Try to open real URLs, but handle potential failures
+            // Open the vendor's compliance document URL directly
             try {
                 window.open(url, '_blank');
             } catch (error) {
-                alert(`📋 ${standardName} Document Access\n\nUnable to open document at: ${url}\n\nThe AI system has identified this as relevant ${standardName} documentation. You may need to access it directly through the vendor's website.`);
+                console.error('Error opening compliance document:', error);
+                alert(`📋 ${standardName} Document Access\n\nUnable to open: ${url}\n\nPlease check if the URL is accessible or try opening it manually in your browser.`);
             }
         }
 
@@ -3040,8 +2947,6 @@
 
         function validateBulkConfiguration() {
             const mode = document.getElementById('bulkAssessmentMode').value;
-            const dataSensitivity = document.getElementById('bulkDataSensitivity').value;
-            const businessCriticality = document.getElementById('bulkBusinessCriticality').value;
             
             const selectedRegulations = Array.from(document.querySelectorAll('input[id^="bulk"]:checked'))
                 .filter(cb => cb.id.includes('gdpr') || cb.id.includes('ccpa') || cb.id.includes('hipaa') || 
@@ -3052,8 +2957,6 @@
             const errors = [];
             
             if (!mode) errors.push('Assessment Mode is required');
-            if (!dataSensitivity) errors.push('Data Sensitivity is required');
-            if (!businessCriticality) errors.push('Business Criticality is required');
             if (selectedRegulations.length === 0) errors.push('At least one regulation must be selected');
             if (uploadedVendors.length === 0) errors.push('No vendors uploaded');
             
@@ -3073,9 +2976,7 @@
             }
             
             const mode = document.getElementById('bulkAssessmentMode').value;
-            const dataSensitivity = document.getElementById('bulkDataSensitivity').value;
-            const businessCriticality = document.getElementById('bulkBusinessCriticality').value;
-            const autoTrustCenter = document.getElementById('bulkAutoTrustCenter').checked;
+            const autoTrustCenter = document.getElementById('bulkAutoTrustCenter')?.checked || true; // Default to true
             const requesterEmail = document.getElementById('bulkRequesterEmail').value;
             
             const selectedRegulations = Array.from(document.querySelectorAll('input[id^="bulk"]:checked'))
@@ -3096,10 +2997,11 @@
                         vendor_domain: vendor.vendor_domain,
                         vendor_name: vendor.vendor_name,
                         requester_email: requesterEmail || vendor.contact_email || 'bulk@assessment.com',
-                        data_sensitivity: dataSensitivity,
+                        data_sensitivity: 'internal', // Default value
                         regulations: selectedRegulations,
-                        business_criticality: businessCriticality,
-                        auto_trust_center: autoTrustCenter,
+                        business_criticality: 'medium', // Default value
+                        auto_trust_center: true, // Always enabled
+                        enhanced_assessment: true, // Always enabled
                         assessment_mode: mode
                     };
                     
@@ -3281,7 +3183,7 @@
                 'Vendor Name', 'Vendor Domain', 'Assessment Mode', 'Overall Score', 'Risk Level',
                 'Compliance Grade', 'Security Grade', 'Data Protection Grade',
                 'AI Services', 'Data Breaches Found', 'Security Track Record',
-                'Assessment Date', 'Assessment ID', 'Business Criticality', 'Data Sensitivity'
+                'Assessment Date', 'Assessment ID'
             ];
             
             exportData.push(headers);
@@ -3321,9 +3223,7 @@
                     dataBreaches.breaches_found || 0,
                     dataBreaches.security_track_record || 'Unknown',
                     new Date(assessment.created_at).toLocaleDateString(),
-                    assessment.id,
-                    assessment.business_criticality || 'Not specified',
-                    assessment.data_sensitivity || 'Not specified'
+                    assessment.id
                 ];
                 
                 exportData.push(row);
@@ -4402,8 +4302,6 @@
                 <th>Status</th>
                 <th>Regulations</th>
                 <th>Created Date</th>
-                <th>Business Criticality</th>
-                <th>Data Sensitivity</th>
             </tr>
         </thead>
         <tbody>
@@ -4421,8 +4319,6 @@
                     <td>${assessment.status || 'Unknown'}</td>
                     <td>${assessment.regulations?.join(', ') || '-'}</td>
                     <td>${new Date(assessment.created_at).toLocaleDateString()}</td>
-                    <td>${assessment.business_criticality || '-'}</td>
-                    <td>${assessment.data_sensitivity || '-'}</td>
                 </tr>
                 `;
             }).join('')}
