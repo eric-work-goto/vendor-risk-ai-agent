@@ -885,6 +885,31 @@
         // Make function globally available immediately
         window.toggleAdvanced = toggleAdvanced;
         
+        // Section collapse/expand functionality
+        function toggleSection(sectionId) {
+            console.log('toggleSection called for:', sectionId);
+            const content = document.getElementById(sectionId);
+            const icon = document.getElementById(sectionId + '-icon');
+            
+            if (!content || !icon) {
+                console.error('Section elements not found for:', sectionId);
+                return;
+            }
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            } else {
+                content.classList.add('hidden');
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
+            }
+        }
+        
+        // Make function globally available
+        window.toggleSection = toggleSection;
+        
         // Start new assessment function - define early to ensure availability
         async function startNewAssessment() {
             console.log('startNewAssessment called'); // Debug log
@@ -1905,45 +1930,50 @@
             
             return `
                 <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div class="flex items-center justify-between mb-3">
-                        <h5 class="font-medium text-red-800">
-                            <i class="fas fa-shield-alt mr-2"></i>Data Breach History
-                        </h5>
-                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getTrackRecordColorClass(trackRecord)}">
-                            ${trackRecord}
-                        </span>
+                    <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('data-breach-content')">
+                        <div class="flex items-center">
+                            <h5 class="font-medium text-red-800">
+                                <i class="fas fa-shield-alt mr-2"></i>Data Breach History
+                            </h5>
+                            <span class="ml-3 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getTrackRecordColorClass(trackRecord)}">
+                                ${trackRecord}
+                            </span>
+                        </div>
+                        <i class="fas fa-chevron-down text-red-600" id="data-breach-content-icon"></i>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                        <div class="bg-white p-3 rounded border text-center">
-                            <div class="text-2xl font-bold ${breachesFound > 0 ? 'text-red-600' : 'text-green-600'} mb-1">
-                                ${breachesFound}
+                    <div id="data-breach-content" class="hidden mt-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                            <div class="bg-white p-3 rounded border text-center">
+                                <div class="text-2xl font-bold ${breachesFound > 0 ? 'text-red-600' : 'text-green-600'} mb-1">
+                                    ${breachesFound}
+                                </div>
+                                <div class="text-sm text-gray-600">Total Breaches</div>
                             </div>
-                            <div class="text-sm text-gray-600">Total Breaches</div>
-                        </div>
-                        <div class="bg-white p-3 rounded border text-center">
-                            <div class="text-2xl font-bold ${recentBreaches.length > 0 ? 'text-orange-600' : 'text-green-600'} mb-1">
-                                ${recentBreaches.length}
+                            <div class="bg-white p-3 rounded border text-center">
+                                <div class="text-2xl font-bold ${recentBreaches.length > 0 ? 'text-orange-600' : 'text-green-600'} mb-1">
+                                    ${recentBreaches.length}
+                                </div>
+                                <div class="text-sm text-gray-600">Recent (3 years)</div>
                             </div>
-                            <div class="text-sm text-gray-600">Recent (3 years)</div>
-                        </div>
-                        <div class="bg-white p-3 rounded border text-center">
-                            <div class="text-lg font-bold ${recommendation.monitoring === 'Enhanced' ? 'text-red-600' : 'text-green-600'} mb-1">
-                                ${recommendation.monitoring || 'Standard'}
+                            <div class="bg-white p-3 rounded border text-center">
+                                <div class="text-lg font-bold ${recommendation.monitoring === 'Enhanced' ? 'text-red-600' : 'text-green-600'} mb-1">
+                                    ${recommendation.monitoring || 'Standard'}
+                                </div>
+                                <div class="text-sm text-gray-600">Monitoring Level</div>
                             </div>
-                            <div class="text-sm text-gray-600">Monitoring Level</div>
                         </div>
+                        
+                        ${recommendation.action ? `
+                            <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                                <div class="text-sm font-medium text-blue-800 mb-1">Risk Assessment Recommendation</div>
+                                <div class="text-sm text-blue-700">${recommendation.action}</div>
+                                ${recommendation.next_review ? `
+                                    <div class="text-xs text-blue-600 mt-1">Next review: ${recommendation.next_review}</div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
                     </div>
-                    
-                    ${recommendation.action ? `
-                        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                            <div class="text-sm font-medium text-blue-800 mb-1">Risk Assessment Recommendation</div>
-                            <div class="text-sm text-blue-700">${recommendation.action}</div>
-                            ${recommendation.next_review ? `
-                                <div class="text-xs text-blue-600 mt-1">Next review: ${recommendation.next_review}</div>
-                            ` : ''}
-                        </div>
-                    ` : ''}
                 </div>
             `;
         }
@@ -2001,6 +2031,7 @@
                             </a>
                         </div>
                     ` : ''}
+                    </div>
                 </div>
             `;
         }
@@ -2051,113 +2082,123 @@
 
             return `
                 <div class="p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
-                    <h5 class="font-medium text-purple-800 mb-3">
-                        <i class="fas fa-robot mr-2"></i>AI Features Available
-                    </h5>
+                    <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('ai-features-content')">
+                        <div class="flex items-center">
+                            <h5 class="font-medium text-purple-800">
+                                <i class="fas fa-robot mr-2"></i>AI Features Available
+                            </h5>
+                            <span class="ml-3 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getMaturityColorClass(maturityLevel)}">
+                                ${maturityLevel}
+                            </span>
+                        </div>
+                        <i class="fas fa-chevron-down text-purple-600" id="ai-features-content-icon"></i>
+                    </div>
                     
-                    <!-- AI Overview -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div class="bg-white p-3 rounded border">
-                            <div class="text-sm font-medium text-gray-700">AI Maturity Level</div>
-                            <div class="mt-1">
-                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getMaturityColorClass(maturityLevel)}">
-                                    ${maturityLevel}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="bg-white p-3 rounded border">
-                            <div class="text-sm font-medium text-gray-700">Service Categories</div>
-                            <div class="text-lg font-bold text-purple-600 mt-1">${serviceCategories.length}</div>
-                        </div>
-                        ${governance.governance_score ? `
+                    <div id="ai-features-content" class="hidden mt-4">
+                        <!-- AI Overview -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                             <div class="bg-white p-3 rounded border">
-                                <div class="text-sm font-medium text-gray-700">Governance Score</div>
-                                <div class="text-lg font-bold ${getGovernanceScoreColor(governance.governance_score)} mt-1">
-                                    ${governance.governance_score}/100
+                                <div class="text-sm font-medium text-gray-700">AI Maturity Level</div>
+                                <div class="mt-1">
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getMaturityColorClass(maturityLevel)}">
+                                        ${maturityLevel}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded border">
+                                <div class="text-sm font-medium text-gray-700">Service Categories</div>
+                                <div class="text-lg font-bold text-purple-600 mt-1">${serviceCategories.length}</div>
+                            </div>
+                            ${governance.governance_score ? `
+                                <div class="bg-white p-3 rounded border">
+                                    <div class="text-sm font-medium text-gray-700">Governance Score</div>
+                                    <div class="text-lg font-bold ${getGovernanceScoreColor(governance.governance_score)} mt-1">
+                                        ${governance.governance_score}/100
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        <!-- AI Service Categories -->
+                        ${serviceCategories.length > 0 ? `
+                            <div class="mb-4">
+                                <div class="text-sm font-medium text-gray-700 mb-2">AI Service Categories</div>
+                                <div class="flex flex-wrap gap-2">
+                                    ${serviceCategories.map(category => `
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                            ${category}
+                                        </span>
+                                    `).join('')}
                                 </div>
                             </div>
                         ` : ''}
+                        
+                        <!-- Detailed AI Services -->
+                        ${servicesDetail.length > 0 ? `
+                            <div class="mb-4">
+                                <div class="text-sm font-medium text-gray-700 mb-2">AI Services Details</div>
+                                <div class="space-y-3">
+                                    ${servicesDetail.map(service => `
+                                        <div class="bg-white p-3 rounded border">
+                                            <div class="font-medium text-gray-800 mb-2">${service.category}</div>
+                                            <div class="text-sm text-gray-600 mb-2">
+                                                <strong>Services:</strong> ${service.services ? service.services.slice(0, 3).join(', ') : 'N/A'}
+                                                ${service.services && service.services.length > 3 ? ` and ${service.services.length - 3} more...` : ''}
+                                            </div>
+                                            <div class="text-sm text-gray-600 mb-2">
+                                                <strong>Use Cases:</strong> ${service.use_cases ? service.use_cases.join(', ') : 'N/A'}
+                                            </div>
+                                            <div class="text-sm text-gray-600">
+                                                <strong>Data Types:</strong> ${service.data_types ? service.data_types.join(', ') : 'N/A'}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <!-- AI Privacy Risks -->
+                        ${privacyRisks.length > 0 ? `
+                            <div class="mb-4">
+                                <div class="text-sm font-medium text-gray-700 mb-2">AI-Related Privacy Considerations</div>
+                                <div class="space-y-2">
+                                    ${privacyRisks.map(risk => `
+                                        <div class="bg-white p-3 rounded border border-yellow-200">
+                                            <div class="flex justify-between items-start mb-2">
+                                                <div class="font-medium text-gray-800">${risk.risk}</div>
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                                    risk.impact === 'High' ? 'bg-red-100 text-red-800' : 
+                                                    risk.impact === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
+                                                    'bg-green-100 text-green-800'
+                                                }">
+                                                    ${risk.impact} Impact
+                                                </span>
+                                            </div>
+                                            <div class="text-sm text-gray-600 mb-2">${risk.description}</div>
+                                            <div class="text-sm text-blue-600">
+                                                <strong>Mitigation:</strong> ${risk.mitigation}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <!-- AI Recommendations -->
+                        ${recommendations.length > 0 ? `
+                            <div class="bg-blue-50 p-3 rounded border border-blue-200">
+                                <div class="text-sm font-medium text-blue-800 mb-2">AI-Related Recommendations</div>
+                                <ul class="text-sm text-blue-700 space-y-1">
+                                    ${recommendations.map(rec => `
+                                        <li class="flex items-start">
+                                            <span class="text-blue-600 mr-2">•</span>
+                                            ${rec}
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
                     </div>
-                    
-                    <!-- AI Service Categories -->
-                    ${serviceCategories.length > 0 ? `
-                        <div class="mb-4">
-                            <div class="text-sm font-medium text-gray-700 mb-2">AI Service Categories</div>
-                            <div class="flex flex-wrap gap-2">
-                                ${serviceCategories.map(category => `
-                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                        ${category}
-                                    </span>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                    
-                    <!-- Detailed AI Services -->
-                    ${servicesDetail.length > 0 ? `
-                        <div class="mb-4">
-                            <div class="text-sm font-medium text-gray-700 mb-2">AI Services Details</div>
-                            <div class="space-y-3">
-                                ${servicesDetail.map(service => `
-                                    <div class="bg-white p-3 rounded border">
-                                        <div class="font-medium text-gray-800 mb-2">${service.category}</div>
-                                        <div class="text-sm text-gray-600 mb-2">
-                                            <strong>Services:</strong> ${service.services ? service.services.slice(0, 3).join(', ') : 'N/A'}
-                                            ${service.services && service.services.length > 3 ? ` and ${service.services.length - 3} more...` : ''}
-                                        </div>
-                                        <div class="text-sm text-gray-600 mb-2">
-                                            <strong>Use Cases:</strong> ${service.use_cases ? service.use_cases.join(', ') : 'N/A'}
-                                        </div>
-                                        <div class="text-sm text-gray-600">
-                                            <strong>Data Types:</strong> ${service.data_types ? service.data_types.join(', ') : 'N/A'}
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                    
-                    <!-- AI Privacy Risks -->
-                    ${privacyRisks.length > 0 ? `
-                        <div class="mb-4">
-                            <div class="text-sm font-medium text-gray-700 mb-2">AI-Related Privacy Considerations</div>
-                            <div class="space-y-2">
-                                ${privacyRisks.map(risk => `
-                                    <div class="bg-white p-3 rounded border border-yellow-200">
-                                        <div class="flex justify-between items-start mb-2">
-                                            <div class="font-medium text-gray-800">${risk.risk}</div>
-                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                                risk.impact === 'High' ? 'bg-red-100 text-red-800' : 
-                                                risk.impact === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
-                                                'bg-green-100 text-green-800'
-                                            }">
-                                                ${risk.impact} Impact
-                                            </span>
-                                        </div>
-                                        <div class="text-sm text-gray-600 mb-2">${risk.description}</div>
-                                        <div class="text-sm text-blue-600">
-                                            <strong>Mitigation:</strong> ${risk.mitigation}
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                    
-                    <!-- AI Recommendations -->
-                    ${recommendations.length > 0 ? `
-                        <div class="bg-blue-50 p-3 rounded border border-blue-200">
-                            <div class="text-sm font-medium text-blue-800 mb-2">AI-Related Recommendations</div>
-                            <ul class="text-sm text-blue-700 space-y-1">
-                                ${recommendations.map(rec => `
-                                    <li class="flex items-start">
-                                        <span class="text-blue-600 mr-2">•</span>
-                                        ${rec}
-                                    </li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                    ` : ''}
                 </div>
             `;
         }
@@ -2171,12 +2212,16 @@
             
             return `
                 <div class="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
-                    <h5 class="font-medium text-green-800 mb-4">
-                        <i class="fas fa-search mr-2"></i>AI Data Flow Documentation Discovery
-                    </h5>
+                    <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('data-flow-content')">
+                        <h5 class="font-medium text-green-800">
+                            <i class="fas fa-search mr-2"></i>AI Data Flow Documentation Discovery
+                        </h5>
+                        <i class="fas fa-chevron-down text-green-600" id="data-flow-content-icon"></i>
+                    </div>
                     
-                    <!-- Summary of Key Information -->
-                    <div class="mb-6">
+                    <div id="data-flow-content" class="hidden mt-4">
+                        <!-- Summary of Key Information -->
+                        <div class="mb-6">
                         <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
                             <h6 class="text-sm font-semibold text-blue-800 mb-3">
                                 <i class="fas fa-info-circle mr-2"></i>Key Data Flow Information Summary
@@ -2343,6 +2388,7 @@
                                 <strong>${discoveredDocs.stats.averageConfidence}%</strong> average confidence.
                             </p>
                         </div>
+                    </div>
                     </div>
                 </div>
             `;
@@ -2522,12 +2568,16 @@
             
             return `
                 <div class="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg mt-4">
-                    <h5 class="font-medium text-indigo-800 mb-4">
-                        <i class="fas fa-shield-alt mr-2"></i>AI Compliance Documentation Discovery
-                    </h5>
+                    <div class="flex items-center justify-between cursor-pointer" onclick="toggleSection('compliance-content')">
+                        <h5 class="font-medium text-indigo-800">
+                            <i class="fas fa-shield-alt mr-2"></i>AI Compliance Documentation Discovery
+                        </h5>
+                        <i class="fas fa-chevron-down text-indigo-600" id="compliance-content-icon"></i>
+                    </div>
                     
-                    <!-- Search Status -->
-                    <div class="mb-6">
+                    <div id="compliance-content" class="hidden mt-4">
+                        <!-- Search Status -->
+                        <div class="mb-6">
                         <div class="flex items-center space-x-3 p-3 bg-white rounded-lg border border-indigo-200 shadow-sm">
                             <div class="flex-shrink-0">
                                 <i class="fas fa-robot text-indigo-600 text-lg"></i>
@@ -2658,6 +2708,7 @@
                                 compliance documents with <strong>${complianceResults.stats.avgConfidence}%</strong> average confidence.
                             </p>
                         </div>
+                    </div>
                     </div>
                 </div>
             `;
