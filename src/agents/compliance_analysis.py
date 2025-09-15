@@ -38,9 +38,11 @@ class ComplianceAnalysisAgent:
     """Agent responsible for analyzing compliance documents"""
     
     def __init__(self):
+        # Use corporate ExpertCity server configuration
         self.llm = ChatOpenAI(
-            model=settings.openai_model,
-            api_key=settings.openai_api_key,
+            model="gpt-4o-mini",
+            api_key="sk-2ea30b318c514c9f874dcd2aa56aa090",
+            base_url="https://chat.expertcity.com/api/v1",
             temperature=0.1
         )
         
