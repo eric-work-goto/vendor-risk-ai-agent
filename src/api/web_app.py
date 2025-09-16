@@ -4697,111 +4697,124 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         discovery_engine = DynamicComplianceDiscovery()
         trust_center_integrator = TrustCenterIntegrator()
         
-        # Update progress - scanning for data breaches
+        # Update progress - running parallel scans
         assessment_results[assessment_id]["progress"] = 15
-        assessment_results[assessment_id]["status"] = "scanning_data_breaches"
+        assessment_results[assessment_id]["status"] = "running_parallel_scans"
         
-        # Real breach scanning
-        try:
-            breach_scan_result = await scan_data_breaches(vendor_domain, vendor_name)
-            logger.info(f"✅ Real breach scan completed for {vendor_domain} - {breach_scan_result['breaches_found']} breaches found")
-        except Exception as e:
-            breach_scan_result = {
-                "error": str(e),
-                "breaches_found": 0,
-                "security_track_record": "No data available",
-                "breach_severity": "unknown"
-            }
-            logger.warning(f"⚠️ Breach scan error for {vendor_domain}: {str(e)}")
+        # Run multiple scans in parallel for faster processing
+        logger.info(f"🚀 Starting parallel scans for {vendor_domain}")
         
-        # Update progress - analyzing privacy practices
-        assessment_results[assessment_id]["progress"] = 25
-        assessment_results[assessment_id]["status"] = "analyzing_privacy_practices"
+        # Create parallel tasks for independent scans
+        scan_tasks = []
         
-        # Real privacy scanning
-        try:
-            privacy_scan_result = await scan_privacy_practices(vendor_domain, vendor_name)
-            logger.info(f"✅ Real privacy scan completed for {vendor_domain} - compliance score: {privacy_scan_result.get('compliance_score', 'Unknown')}")
-        except Exception as e:
-            privacy_scan_result = {
-                "error": str(e),
-                "compliance_score": 0,
-                "privacy_framework": "Not detected",
-                "data_collection_practices": "unknown"
-            }
-            logger.warning(f"⚠️ Privacy scan error for {vendor_domain}: {str(e)}")
+        # Breach scanning task
+        async def breach_scan():
+            try:
+                result = await scan_data_breaches(vendor_domain, vendor_name)
+                logger.info(f"✅ Breach scan completed for {vendor_domain} - {result['breaches_found']} breaches found")
+                return ("breach_scan", result)
+            except Exception as e:
+                logger.warning(f"⚠️ Breach scan error for {vendor_domain}: {str(e)}")
+                return ("breach_scan", {"error": str(e), "breaches_found": 0, "security_track_record": "No data available", "breach_severity": "unknown"})
         
-        # Update progress - scanning AI services
+        # Privacy scanning task
+        async def privacy_scan():
+            try:
+                result = await scan_privacy_practices(vendor_domain, vendor_name)
+                logger.info(f"✅ Privacy scan completed for {vendor_domain} - compliance score: {result.get('compliance_score', 'Unknown')}")
+                return ("privacy_scan", result)
+            except Exception as e:
+                logger.warning(f"⚠️ Privacy scan error for {vendor_domain}: {str(e)}")
+                return ("privacy_scan", {"error": str(e), "compliance_score": 0, "privacy_framework": "Not detected", "data_collection_practices": "unknown"})
+        
+        # AI services scanning task
+        async def ai_scan():
+            try:
+                result = await scan_ai_services(vendor_domain, vendor_name)
+                logger.info(f"✅ AI services scan completed for {vendor_domain} - maturity level: {result.get('ai_maturity_level', 'No AI Services')}")
+                return ("ai_scan", result)
+            except Exception as e:
+                logger.warning(f"⚠️ AI services scan error for {vendor_domain}: {str(e)}")
+                return ("ai_scan", {"error": str(e), "offers_ai_services": False, "ai_maturity_level": "Not detected", "ai_frameworks": []})
+        
+        # Compliance discovery task
+        async def compliance_scan():
+            try:
+                result = await discovery_engine.discover_vendor_compliance(
+                    vendor_domain, 
+                    request_data.regulations or ["gdpr", "soc2", "iso27001"]
+                )
+                logger.info(f"✅ Compliance discovery completed for {vendor_domain} - found {len(result.get('compliance_documents', []))} documents")
+                return ("compliance_scan", result)
+            except Exception as e:
+                logger.warning(f"⚠️ Compliance discovery error for {vendor_domain}: {str(e)}")
+                return ("compliance_scan", {"error": str(e), "compliance_documents": [], "trust_centers": [], "frameworks_found": []})
+        
+        # Trust center discovery task
+        async def trust_center_scan():
+            try:
+                result = await trust_center_integrator.discover_trust_center(vendor_domain)
+                logger.info(f"✅ Trust center discovery completed for {vendor_domain} - type: {result.get('trust_center_type', 'None')}")
+                return ("trust_center_scan", result)
+            except Exception as e:
+                logger.warning(f"⚠️ Trust center discovery error for {vendor_domain}: {str(e)}")
+                return ("trust_center_scan", {"error": str(e), "trust_center_found": False, "trust_center_type": "none", "access_methods": []})
+        
+        # Data flow scanning task
+        async def data_flow_scan():
+            try:
+                result = await scan_data_flows(vendor_domain, vendor_name)
+                logger.info(f"✅ Data flow scan completed for {vendor_domain}")
+                return ("data_flow_scan", result)
+            except Exception as e:
+                logger.warning(f"⚠️ Data flow scan error for {vendor_domain}: {str(e)}")
+                return ("data_flow_scan", {"error": str(e), "data_flows": [], "third_party_integrations": [], "data_residency": "unknown"})
+        
+        # Execute all scans in parallel
+        scan_tasks = [
+            breach_scan(),
+            privacy_scan(), 
+            ai_scan(),
+            compliance_scan(),
+            trust_center_scan(),
+            data_flow_scan()
+        ]
+        
+        # Update progress - waiting for parallel scans
         assessment_results[assessment_id]["progress"] = 35
-        assessment_results[assessment_id]["status"] = "scanning_ai_services"
+        assessment_results[assessment_id]["status"] = "processing_parallel_scans"
         
-        # Real AI services scanning
-        try:
-            ai_scan_result = await scan_ai_services(vendor_domain, vendor_name)
-            ai_maturity = ai_scan_result.get('ai_maturity_level', 'No AI Services')
-            logger.info(f"✅ Real AI services scan completed for {vendor_domain} - maturity level: {ai_maturity}")
-        except Exception as e:
-            ai_scan_result = {
-                "error": str(e),
-                "offers_ai_services": False,
-                "ai_maturity_level": "Not detected",
-                "ai_frameworks": []
-            }
-            logger.warning(f"⚠️ AI services scan error for {vendor_domain}: {str(e)}")
+        # Wait for all scans to complete in parallel
+        scan_results = await asyncio.gather(*scan_tasks, return_exceptions=True)
         
-        # Update progress - discovering compliance frameworks
-        assessment_results[assessment_id]["progress"] = 45
-        assessment_results[assessment_id]["status"] = "discovering_compliance_frameworks"
+        # Process results from parallel scans
+        breach_scan_result = {}
+        privacy_scan_result = {}
+        ai_scan_result = {}
+        compliance_discovery = {}
+        trust_center_info = {}
+        data_flow_result = {}
         
-        # Real compliance discovery
-        try:
-            compliance_discovery = await discovery_engine.discover_vendor_compliance(
-                vendor_domain, 
-                request_data.regulations or ["gdpr", "soc2", "iso27001"]
-            )
-            logger.info(f"✅ Real compliance discovery completed for {vendor_domain} - found {len(compliance_discovery.get('compliance_documents', []))} documents")
-        except Exception as e:
-            compliance_discovery = {
-                "error": str(e),
-                "compliance_documents": [],
-                "trust_centers": [],
-                "frameworks_found": []
-            }
-            logger.warning(f"⚠️ Compliance discovery error for {vendor_domain}: {str(e)}")
+        for result in scan_results:
+            if isinstance(result, Exception):
+                logger.error(f"Parallel scan failed: {str(result)}")
+                continue
+            
+            scan_type, data = result
+            if scan_type == "breach_scan":
+                breach_scan_result = data
+            elif scan_type == "privacy_scan":
+                privacy_scan_result = data
+            elif scan_type == "ai_scan":
+                ai_scan_result = data
+            elif scan_type == "compliance_scan":
+                compliance_discovery = data
+            elif scan_type == "trust_center_scan":
+                trust_center_info = data
+            elif scan_type == "data_flow_scan":
+                data_flow_result = data
         
-        # Update progress - discovering trust centers
-        assessment_results[assessment_id]["progress"] = 55
-        assessment_results[assessment_id]["status"] = "discovering_trust_centers"
-        
-        # Real trust center discovery
-        try:
-            trust_center_info = await trust_center_integrator.discover_trust_center(vendor_domain)
-            logger.info(f"✅ Real trust center discovery completed for {vendor_domain} - type: {trust_center_info.get('trust_center_type', 'None')}")
-        except Exception as e:
-            trust_center_info = {
-                "error": str(e),
-                "trust_center_found": False,
-                "trust_center_type": "none",
-                "access_methods": []
-            }
-            logger.warning(f"⚠️ Trust center discovery error for {vendor_domain}: {str(e)}")
-        
-        # Update progress - scanning data flows
-        assessment_results[assessment_id]["progress"] = 65
-        assessment_results[assessment_id]["status"] = "scanning_data_flows"
-        
-        # Real data flow scanning
-        try:
-            data_flow_result = await scan_data_flows(vendor_domain, vendor_name)
-            logger.info(f"✅ Real data flow scan completed for {vendor_domain}")
-        except Exception as e:
-            data_flow_result = {
-                "error": str(e),
-                "data_flows": [],
-                "third_party_integrations": [],
-                "data_residency": "unknown"
-            }
-            logger.warning(f"⚠️ Data flow scan error for {vendor_domain}: {str(e)}")
+        logger.info(f"🎯 Parallel scans completed for {vendor_domain}")
         
         # Update progress - AI-powered assessment analysis
         assessment_results[assessment_id]["progress"] = 70
@@ -4934,7 +4947,7 @@ async def run_mock_assessment(assessment_id: str, request_data: CreateAssessment
         regulations = request_data.regulations
         
         for progress, status in steps:
-            await asyncio.sleep(1)  # Reduced from 2 to 1 second for faster demo
+            await asyncio.sleep(0.3)  # Optimized from 1 second to 0.3 seconds for faster response
             assessment_results[assessment_id]["progress"] = progress
             assessment_results[assessment_id]["status"] = status
             
@@ -6969,128 +6982,158 @@ async def get_bulk_assessment_status(job_id: str):
 
 
 async def process_bulk_assessments(job_id: str):
-    """Background task to process bulk assessments"""
+    """Background task to process bulk assessments with parallel processing"""
     try:
         bulk_job = bulk_assessment_jobs[job_id]
         
-        for index, vendor in enumerate(bulk_job.vendor_list):
+        # Process assessments in parallel batches for faster completion
+        batch_size = 3  # Process 3 vendors simultaneously
+        vendor_batches = [bulk_job.vendor_list[i:i + batch_size] for i in range(0, len(bulk_job.vendor_list), batch_size)]
+        
+        for batch_index, vendor_batch in enumerate(vendor_batches):
             try:
-                bulk_job.current_vendor_index = index
-                bulk_job.progress = int((index / bulk_job.total_vendors) * 100)
+                # Update progress for batch
+                bulk_job.current_vendor_index = batch_index * batch_size
+                bulk_job.progress = int((batch_index * batch_size / bulk_job.total_vendors) * 100)
                 
-                # Start individual assessment
-                assessment_data = {
-                    "vendorDomain": vendor["vendor_domain"],
-                    "vendorName": vendor["vendor_name"],
-                    "dataSensitivity": vendor.get("data_sensitivity", "medium"),
-                    "regulations": vendor.get("regulations", ["SOC 2 Type 2", "ISO 27001"]),
-                    "businessCriticality": vendor.get("business_criticality", "high"),
-                    "autoFollowUp": False,
-                    "deepScan": False
-                }
+                # Process vendors in parallel within batch
+                batch_tasks = []
+                for vendor in vendor_batch:
+                    task = asyncio.create_task(process_single_vendor_assessment(vendor, bulk_job))
+                    batch_tasks.append(task)
                 
-                # Create individual assessment
-                assessment_id = str(uuid.uuid4())
-                assessment_results[assessment_id] = {
-                    "status": "processing",
-                    "progress": 0,
-                    "vendorDomain": vendor["vendor_domain"],
-                    "vendorName": vendor["vendor_name"]
-                }
+                # Wait for all vendors in batch to complete
+                await asyncio.gather(*batch_tasks, return_exceptions=True)
                 
-                # Simulate assessment processing including data flow scanning
-                await asyncio.sleep(2)  # Simulate processing time
-                
-                # Generate mock data flow information for bulk assessment
-                vendor_domain = vendor["vendor_domain"]
-                domain_hash = deterministic_hash(vendor_domain)
-                collection_scope = abs(domain_hash) % 4  # 0-3 scale
-                
-                mock_data_flows = {
-                    "source_information": {
-                        "primary_source_url": f"https://{vendor_domain}/privacy-policy",
-                        "additional_sources": [
-                            f"https://{vendor_domain}/privacy",
-                            f"https://{vendor_domain}/terms-of-service",
-                            f"https://{vendor_domain}/security"
-                        ],
-                        "scan_method": "Bulk assessment website analysis",
-                        "data_source_note": f"Data flow information analyzed from {vendor_domain} website and documentation"
-                    },
-                    "data_flow_overview": {
-                        "collection_scope": ["Minimal", "Basic", "Moderate", "Extensive"][collection_scope],
-                        "data_types_count": 3 + collection_scope * 2,
-                        "sharing_partners_count": 1 + collection_scope,
-                        "cross_border_transfers": collection_scope >= 2
-                    },
-                    "risk_assessment": {
-                        "overall_risk_level": ["Low", "Low", "Medium", "High"][collection_scope],
-                        "risk_score": 25 + (collection_scope * 20),
-                        "mitigation_status": "Adequate" if collection_scope <= 2 else "Needs Enhancement"
-                    }
-                }
-                
-                # Generate mock results
-                overall_score = 75 + (deterministic_hash(vendor["vendor_domain"]) % 25)
-                risk_level = "excellent" if overall_score >= 90 else "good" if overall_score >= 80 else "adequate" if overall_score >= 70 else "poor" if overall_score >= 60 else "critical"
-                
-                assessment_results[assessment_id] = {
-                    "status": "completed",
-                    "progress": 100,
-                    "vendorDomain": vendor["vendor_domain"],
-                    "vendorName": vendor["vendor_name"],
-                    "results": {
-                        "overall_score": overall_score,
-                        "risk_level": risk_level,
-                        "data_flows": mock_data_flows,  # Include data flow information
-                        "compliance_documents": [
-                            {
-                                "document_name": "SOC 2 Type 2 Report",
-                                "status": "current",
-                                "valid_until": "2025-12-31",
-                                "description": f"Service Organization Control 2 Type 2 audit report for {vendor['vendor_name']}",
-                                "view_url": f"/api/v1/documents/{assessment_id}/soc2/view",
-                                "download_url": f"/api/v1/documents/{assessment_id}/soc2/download",
-                                "file_size": "2.4 MB"
-                            },
-                            {
-                                "document_name": "ISO 27001 Certificate",
-                                "status": "current",
-                                "valid_until": "2026-06-30",
-                                "description": f"ISO 27001 Information Security Management certification for {vendor['vendor_name']}",
-                                "view_url": f"/api/v1/documents/{assessment_id}/iso27001/view",
-                                "download_url": f"/api/v1/documents/{assessment_id}/iso27001/download",
-                                "file_size": "1.8 MB"
-                            }
-                        ]
-                    }
-                }
-                
-                bulk_job.completed_assessments.append({
-                    "assessment_id": assessment_id,
-                    "vendor_domain": vendor["vendor_domain"],
-                    "vendor_name": vendor["vendor_name"],
-                    "overall_score": overall_score,
-                    "risk_level": risk_level
-                })
+                logger.info(f"Completed batch {batch_index + 1}/{len(vendor_batches)} for bulk job {job_id}")
                 
             except Exception as e:
-                logger.error(f"Individual assessment failed for {vendor['vendor_domain']}: {str(e)}")
-                bulk_job.failed_assessments.append({
-                    "vendor_domain": vendor["vendor_domain"],
-                    "vendor_name": vendor["vendor_name"],
-                    "error": str(e)
-                })
+                logger.error(f"Error processing batch {batch_index} for job {job_id}: {str(e)}")
+                continue
         
-        # Complete the job
+        # Mark job as completed
         bulk_job.status = "completed"
         bulk_job.progress = 100
-        bulk_job.end_time = asyncio.get_event_loop().time()
+        logger.info(f"Bulk job {job_id} completed successfully")
         
     except Exception as e:
-        logger.error(f"Bulk assessment processing failed: {str(e)}")
-        if job_id in bulk_assessment_jobs:
-            bulk_assessment_jobs[job_id].status = "failed"
+        logger.error(f"Error in bulk assessment job {job_id}: {str(e)}")
+        bulk_job = bulk_assessment_jobs.get(job_id)
+        if bulk_job:
+            bulk_job.status = "failed"
+            bulk_job.error = str(e)
+
+
+async def process_single_vendor_assessment(vendor, bulk_job):
+    """Process a single vendor assessment as part of bulk processing"""
+    try:
+        # Start individual assessment
+        assessment_data = {
+            "vendorDomain": vendor["vendor_domain"],
+            "vendorName": vendor["vendor_name"],
+            "dataSensitivity": vendor.get("data_sensitivity", "medium"),
+            "regulations": vendor.get("regulations", ["SOC 2 Type 2", "ISO 27001"]),
+            "businessCriticality": vendor.get("business_criticality", "high"),
+            "autoFollowUp": False,
+            "deepScan": False
+        }
+        
+        # Create individual assessment
+        assessment_id = str(uuid.uuid4())
+        assessment_results[assessment_id] = {
+            "status": "processing",
+            "progress": 0,
+            "vendorDomain": vendor["vendor_domain"],
+            "vendorName": vendor["vendor_name"]
+        }
+        
+        # Optimized processing time for bulk assessments
+        await asyncio.sleep(1.0)  # Reduced from 2 to 1 second for faster bulk processing
+        
+        # Generate mock data flow information for bulk assessment
+        vendor_domain = vendor["vendor_domain"]
+        domain_hash = deterministic_hash(vendor_domain)
+        collection_scope = abs(domain_hash) % 4  # 0-3 scale
+        
+        mock_data_flows = {
+            "source_information": {
+                "primary_source_url": f"https://{vendor_domain}/privacy-policy",
+                "additional_sources": [
+                    f"https://{vendor_domain}/privacy",
+                    f"https://{vendor_domain}/terms-of-service",
+                    f"https://{vendor_domain}/security"
+                ],
+                "scan_method": "Optimized bulk assessment analysis",
+                "data_source_note": f"Data flow information analyzed from {vendor_domain} website and documentation"
+            },
+            "data_flow_overview": {
+                "collection_scope": ["Minimal", "Basic", "Moderate", "Extensive"][collection_scope],
+                "data_types_count": 3 + collection_scope * 2,
+                "sharing_partners_count": 1 + collection_scope,
+                "cross_border_transfers": collection_scope >= 2
+            },
+            "risk_assessment": {
+                "overall_risk_level": ["Low", "Low", "Medium", "High"][collection_scope],
+                "risk_score": 25 + (collection_scope * 20),
+                "mitigation_status": "Adequate" if collection_scope <= 2 else "Needs Enhancement"
+            }
+        }
+        
+        # Generate mock results
+        overall_score = 75 + (deterministic_hash(vendor["vendor_domain"]) % 25)
+        risk_level = "excellent" if overall_score >= 90 else "good" if overall_score >= 80 else "adequate" if overall_score >= 70 else "poor" if overall_score >= 60 else "critical"
+        
+        assessment_results[assessment_id] = {
+            "status": "completed",
+            "progress": 100,
+            "vendorDomain": vendor["vendor_domain"],
+            "vendorName": vendor["vendor_name"],
+            "results": {
+                "overall_score": overall_score,
+                "risk_level": risk_level,
+                "data_flows": mock_data_flows,  # Include data flow information
+                "compliance_documents": [
+                    {
+                        "document_name": "SOC 2 Type 2 Report",
+                        "status": "current",
+                        "valid_until": "2025-12-31",
+                        "description": f"Service Organization Control 2 Type 2 audit report for {vendor['vendor_name']}",
+                        "view_url": f"/api/v1/documents/{assessment_id}/soc2/view",
+                        "download_url": f"/api/v1/documents/{assessment_id}/soc2/download",
+                        "file_size": "2.4 MB"
+                    },
+                    {
+                        "document_name": "ISO 27001 Certificate",
+                        "status": "current",
+                        "valid_until": "2026-06-30",
+                        "description": f"ISO 27001 Information Security Management certification for {vendor['vendor_name']}",
+                        "view_url": f"/api/v1/documents/{assessment_id}/iso27001/view",
+                        "download_url": f"/api/v1/documents/{assessment_id}/iso27001/download",
+                        "file_size": "1.8 MB"
+                    }
+                ]
+            }
+        }
+        
+        bulk_job.completed_assessments.append({
+            "assessment_id": assessment_id,
+            "vendor_domain": vendor["vendor_domain"],
+            "vendor_name": vendor["vendor_name"],
+            "overall_score": overall_score,
+            "risk_level": risk_level
+        })
+        
+        logger.info(f"Completed assessment for {vendor['vendor_domain']} in bulk job")
+        return assessment_id
+        
+    except Exception as e:
+        logger.error(f"Individual assessment failed for {vendor['vendor_domain']}: {str(e)}")
+        bulk_job.failed_assessments.append({
+            "vendor_domain": vendor["vendor_domain"],
+            "vendor_name": vendor["vendor_name"],
+            "error": str(e)
+        })
+        raise e
 
 
 @app.get("/api/v1/trust-center/discover/{domain}")
