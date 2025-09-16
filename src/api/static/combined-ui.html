@@ -166,7 +166,7 @@
                             </button>
                             
                             <!-- New Scan Button -->
-                            <button type="button" onclick="startNewAssessment()" 
+                            <button type="button" id="newScanButton" 
                                     class="w-full px-6 py-3 mt-3 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 shadow-md hover:shadow-lg">
                                 <i class="fas fa-plus mr-2"></i>New Scan
                             </button>
@@ -838,31 +838,13 @@
         // Make function globally available
         window.toggleSection = toggleSection;
         
-        // Start new assessment function - define early to ensure availability
-        async function startNewAssessment() {
-            console.log('startNewAssessment called'); // Debug log
-            const form = document.getElementById('assessmentForm');
-            if (!form) {
-                console.error('Assessment form not found');
-                return;
-            }
-            
-            console.log('Form submitted via startNewAssessment!'); // Debug log
-            
-            // Create and dispatch submit event
-            const submitEvent = new Event('submit', {
-                bubbles: true,
-                cancelable: true
-            });
-            form.dispatchEvent(submitEvent);
-        }
-        
-        // Make function globally available immediately
-        window.startNewAssessment = startNewAssessment;
+        // Note: startNewAssessment function is defined later in the file
 
         // Global variables
         let currentAssessmentId = null;
         let bulkAssessmentIds = [];
+        let pollTimeoutId = null; // Track polling timeout for current assessment
+        let isPollingActive = false; // Flag to control polling state
         
         // Optimization: Cache for frequently requested data
         const vendorCache = {
@@ -1021,8 +1003,7 @@
             let pollCount = 0;
             let currentInterval = 2000; // Start with 2 seconds for active polling
             const maxPolls = 300; // Extended max polls for dynamic intervals
-            let pollTimeoutId = null; // Track the current timeout
-            let isPollingActive = true; // Flag to control polling
+            isPollingActive = true; // Flag to control polling
             
             log(`🔄 Starting optimized polling for assessment ${assessmentId}`, 'info');
             
@@ -1658,8 +1639,30 @@
 
         // Function to start a new assessment by resetting the form
         function startNewAssessment() {
-            console.log('startNewAssessment called'); // Debug log
+            console.log('� Starting new assessment (stopping any previous scan)...');
+            
             try {
+                // Check if we have form data before resetting
+                const vendorDomainInput = document.getElementById('vendorDomain');
+                const requesterEmailInput = document.getElementById('requesterEmail');
+                const shouldAutoStart = vendorDomainInput && vendorDomainInput.value.trim() && 
+                                       requesterEmailInput && requesterEmailInput.value.trim();
+                
+                // Stop any running assessment immediately
+                if (currentAssessmentId) {
+                    log(`🛑 Stopping previous assessment: ${currentAssessmentId}`, 'info');
+                }
+                
+                // Stop polling if it's active
+                if (pollTimeoutId) {
+                    clearTimeout(pollTimeoutId);
+                    pollTimeoutId = null;
+                    log('🔄 Stopped assessment polling', 'info');
+                }
+                
+                // Reset polling state
+                isPollingActive = false;
+                
                 // Reset current assessment ID
                 currentAssessmentId = null;
                 
@@ -1676,10 +1679,10 @@
                     noResultsMessage.classList.remove('hidden');
                 }
                 
-                // Hide progress section and reset progress
+                // Show progress section and reset progress
                 const progressSection = document.getElementById('progressSection');
                 if (progressSection) {
-                    progressSection.classList.add('hidden');
+                    progressSection.classList.remove('hidden');
                 }
                 
                 // Hide download section
@@ -1703,9 +1706,7 @@
                     assessmentForm.reset();
                 }
                 
-                // Clear any input fields explicitly
-                const vendorDomainInput = document.getElementById('vendorDomain');
-                const requesterEmailInput = document.getElementById('requesterEmail');
+                // Clear any input fields explicitly (reuse variables from above)
                 
                 if (vendorDomainInput) vendorDomainInput.value = '';
                 if (requesterEmailInput) requesterEmailInput.value = '';
@@ -1716,8 +1717,12 @@
                     checkbox.checked = false;
                 });
                 
-                // Show a notification that form has been reset
-                showNotification('Ready for new assessment', 'Form has been reset. You can now assess another vendor.', 'success');
+                // Show appropriate notification
+                if (shouldAutoStart) {
+                    showNotification('Starting new assessment', 'Previous assessment stopped. Starting fresh assessment...', 'info');
+                } else {
+                    showNotification('Ready for new assessment', 'Form has been reset. You can now assess another vendor.', 'success');
+                }
                 
                 // Scroll to the top of the form
                 const formContainer = document.querySelector('.max-w-4xl');
@@ -1732,14 +1737,80 @@
                     }, 500);
                 }
                 
+                // Auto-start new assessment if we had valid form data before reset
+                if (shouldAutoStart && assessmentForm) {
+                    // If there's a valid vendor domain, auto-submit after a brief delay
+                    setTimeout(() => {
+                        log('🚀 Auto-starting new assessment with existing vendor data', 'info');
+                        const submitEvent = new Event('submit', {
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        assessmentForm.dispatchEvent(submitEvent);
+                    }, 1000); // 1 second delay to let user see the reset
+                }
+                
             } catch (error) {
                 console.error('Error starting new assessment:', error);
                 showNotification('Error', 'There was an error resetting the form. Please refresh the page.', 'error');
             }
         }
 
-        // Make function globally available
+        // Function to stop current assessment cleanly
+        function stopCurrentAssessment() {
+            console.log('stopCurrentAssessment called');
+            try {
+                if (currentAssessmentId) {
+                    log(`🛑 Stopping assessment: ${currentAssessmentId}`, 'info');
+                    currentAssessmentId = null;
+                }
+                
+                if (pollTimeoutId) {
+                    clearTimeout(pollTimeoutId);
+                    pollTimeoutId = null;
+                    log('🔄 Polling stopped', 'info');
+                }
+                
+                isPollingActive = false;
+                
+                // Update progress to show stopped state
+                const progressStatus = document.getElementById('progressStatus');
+                if (progressStatus) {
+                    progressStatus.textContent = 'Assessment stopped - Ready for new assessment';
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Error stopping assessment:', error);
+                return false;
+            }
+        }
+
+        // Make functions globally available
         window.startNewAssessment = startNewAssessment;
+        window.stopCurrentAssessment = stopCurrentAssessment;
+        
+        // Initialize New Scan button functionality on page load
+        window.addEventListener('load', function() {
+            // Add event listener to New Scan button
+            const newScanButton = document.getElementById('newScanButton');
+            if (newScanButton) {
+                newScanButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (typeof startNewAssessment === 'function') {
+                        try {
+                            startNewAssessment();
+                        } catch (error) {
+                            console.error('❌ Error calling startNewAssessment:', error);
+                            showNotification('Error', 'There was an error starting new assessment: ' + error.message, 'error');
+                        }
+                    } else {
+                        console.error('❌ startNewAssessment function not found');
+                        showNotification('Error', 'Assessment function not available. Please refresh the page.', 'error');
+                    }
+                });
+            }
+        });
 
         function getRiskColorClass(score) {
             if (score >= 70) return 'bg-red-100 text-red-800';
