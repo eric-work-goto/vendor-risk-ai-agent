@@ -8815,6 +8815,305 @@ async def start_bulk_assessments(requester_email: str = None):
             "vendor_count": 0
         }
 
+@app.post("/api/v1/generate-vendor-description")
+async def generate_vendor_description(request: dict):
+    """
+    Generate a comprehensive AI-powered description for a vendor
+    """
+    try:
+        domain = request.get('domain', '').strip()
+        
+        if not domain:
+            return {
+                "success": False,
+                "error": "Domain is required"
+            }
+        
+        # Use ExpertCity corporate server configuration
+        corporate_base_url = "https://chat.expertcity.com/api/v1"
+        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
+        
+        # Initialize OpenAI client (v1.0+ API) with corporate server
+        from openai import OpenAI
+        
+        # Try to detect proxy settings
+        import urllib.request
+        proxy_handler = urllib.request.getproxies()
+        
+        # Initialize client with proxy support if needed
+        if proxy_handler:
+            import httpx
+            proxy_client = httpx.Client(proxies=proxy_handler)
+            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key, http_client=proxy_client)
+        else:
+            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
+        
+        # Create a comprehensive prompt for detailed vendor information
+        prompt = f"""Analyze the domain '{domain}' and provide a comprehensive vendor description. 
+
+Respond ONLY with a valid JSON object in this exact format:
+
+{{
+    "company_name": "Clear company name without quotes or extra formatting",
+    "description": "Professional 2-3 sentence description of what this company does and their business focus",
+    "services": "Specific services, products, or solutions they provide",
+    "business_model": "Business model type and target market",
+    "risk_considerations": "Key risk factors for vendor assessment"
+}}
+
+Requirements:
+- Use clear, professional language
+- No markdown formatting or code blocks
+- No extra quotes or special characters
+- Keep descriptions concise and business-focused
+- Focus on information relevant for vendor risk assessment"""
+
+        # Make the API call
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a business analyst providing vendor assessments for risk management. Respond ONLY with clean, valid JSON. No markdown, no code blocks, no extra formatting. Use professional, clear language."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            max_tokens=800,
+            temperature=0.3
+        )
+        
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Clean up the response to extract JSON if it's wrapped in markdown or other text
+        def clean_json_response(text):
+            """Extract and clean JSON from AI response"""
+            import re
+            
+            # Remove markdown code blocks if present
+            text = re.sub(r'```json\s*', '', text)
+            text = re.sub(r'\s*```', '', text)
+            
+            # Try to find JSON object in the text
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                return json_match.group(0)
+            return text
+        
+        # Clean and parse the JSON response
+        try:
+            import json
+            import re
+            
+            cleaned_response = clean_json_response(ai_response)
+            vendor_info = json.loads(cleaned_response)
+            
+            # Clean up text fields to remove unwanted formatting
+            def clean_text(text):
+                if not text:
+                    return ""
+                # Remove excessive quotes and clean up formatting
+                text = re.sub(r'^["\']|["\']$', '', str(text))  # Remove surrounding quotes
+                text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+                text = text.strip()
+                return text
+            
+            return {
+                "success": True,
+                "domain": domain,
+                "company_name": clean_text(vendor_info.get("company_name", "")),
+                "description": clean_text(vendor_info.get("description", "")),
+                "services": clean_text(vendor_info.get("services", "")),
+                "business_model": clean_text(vendor_info.get("business_model", "")),
+                "risk_considerations": clean_text(vendor_info.get("risk_considerations", ""))
+            }
+        except (json.JSONDecodeError, Exception) as e:
+            # Fallback if JSON parsing fails - try to extract useful information
+            logger.warning(f"Failed to parse JSON response for {domain}: {e}")
+            logger.warning(f"Raw response: {ai_response[:200]}...")
+            
+            # Extract company name from domain
+            domain_parts = domain.replace('https://', '').replace('http://', '').replace('www.', '').split('.')
+            company_name = domain_parts[0].title() if domain_parts else "Unknown Company"
+            
+            # Clean the raw response
+            clean_description = ai_response.replace('```json', '').replace('```', '').replace('{', '').replace('}', '').strip()
+            clean_description = re.sub(r'"[^"]*":', '', clean_description)  # Remove JSON keys
+            clean_description = re.sub(r'["\']', '', clean_description)  # Remove quotes
+            clean_description = re.sub(r'\s+', ' ', clean_description)  # Normalize whitespace
+            
+            return {
+                "success": True,
+                "domain": domain,
+                "company_name": company_name,
+                "description": clean_description[:500] + "..." if len(clean_description) > 500 else clean_description,
+                "services": "",
+                "business_model": "",
+                "risk_considerations": ""
+            }
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Vendor description generation failed: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Return more detailed error information for debugging
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+
+@app.post("/api/v1/find-vendor-subprocessors")
+async def find_vendor_subprocessors(request: dict):
+    """
+    Find vendor sub-processors and third-party data processing partners using AI
+    """
+    try:
+        domain = request.get('domain', '').strip()
+        
+        if not domain:
+            return {
+                "success": False,
+                "error": "Domain is required"
+            }
+        
+        # Use ExpertCity corporate server configuration
+        corporate_base_url = "https://chat.expertcity.com/api/v1"
+        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
+        
+        # Initialize OpenAI client (v1.0+ API) with corporate server
+        from openai import OpenAI
+        
+        # Try to detect proxy settings
+        import urllib.request
+        proxy_handler = urllib.request.getproxies()
+        
+        # Initialize client with proxy support if needed
+        if proxy_handler:
+            import httpx
+            proxy_client = httpx.Client(proxies=proxy_handler)
+            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key, http_client=proxy_client)
+        else:
+            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
+        
+        # Create a comprehensive prompt for sub-processor discovery
+        prompt = f"""Please analyze the domain '{domain}' and provide information about their sub-processors, third-party data processing partners, and vendors they work with for data handling.
+
+Return the information in the following JSON format:
+
+{{
+    "subprocessors": [
+        {{
+            "name": "Sub-processor company name",
+            "domain": "sub-processor domain if known",
+            "purpose": "What service they provide (e.g., 'Cloud hosting', 'Email delivery', 'Analytics')",
+            "data_types": ["List of data types processed", "e.g. Personal data", "Payment information"],
+            "location": "Geographic location if known",
+            "confidence": 85
+        }}
+    ]
+}}
+
+Focus on finding real sub-processors that {domain} uses for:
+- Cloud infrastructure and hosting
+- Payment processing
+- Email and communication services
+- Analytics and tracking
+- Customer support tools
+- Marketing platforms
+- Data storage and backup
+
+If no specific sub-processors are found, return an empty array. Be factual and only include information that can be reasonably inferred or is publicly documented."""
+
+        # Make the API call
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a privacy compliance analyst specializing in identifying vendor sub-processors and data processing partners. Always respond in valid JSON format with the requested structure. Only include factual information that can be verified or reasonably inferred from public sources."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.2
+        )
+        
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Clean up the response text
+        def clean_text(text):
+            if not text:
+                return ""
+            # Remove common JSON formatting artifacts
+            text = text.replace('```json', '').replace('```', '').replace('`', '')
+            # Remove extra whitespace and normalize
+            text = ' '.join(text.split())
+            text = text.strip()
+            return text
+        
+        # Try to parse the JSON response
+        try:
+            import json
+            # Clean the response before parsing
+            cleaned_response = clean_text(ai_response)
+            subprocessor_data = json.loads(cleaned_response)
+            
+            # Validate the structure and clean the data
+            subprocessors = []
+            if "subprocessors" in subprocessor_data and isinstance(subprocessor_data["subprocessors"], list):
+                for processor in subprocessor_data["subprocessors"]:
+                    if isinstance(processor, dict):
+                        cleaned_processor = {
+                            "name": clean_text(processor.get("name", "")),
+                            "domain": clean_text(processor.get("domain", "")),
+                            "purpose": clean_text(processor.get("purpose", "")),
+                            "data_types": [clean_text(dt) for dt in processor.get("data_types", []) if clean_text(dt)],
+                            "location": clean_text(processor.get("location", "")),
+                            "confidence": processor.get("confidence", 75)
+                        }
+                        # Only add if we have meaningful data
+                        if cleaned_processor["name"] or cleaned_processor["purpose"]:
+                            subprocessors.append(cleaned_processor)
+            
+            return {
+                "success": True,
+                "domain": domain,
+                "subprocessors": subprocessors,
+                "count": len(subprocessors)
+            }
+            
+        except (json.JSONDecodeError, Exception) as e:
+            # Fallback if JSON parsing fails
+            logger.warning(f"Failed to parse JSON response for sub-processors {domain}: {e}")
+            logger.warning(f"Raw response: {ai_response[:200]}...")
+            
+            return {
+                "success": False,
+                "error": f"Unable to parse sub-processor information: {str(e)}",
+                "domain": domain,
+                "subprocessors": []
+            }
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Sub-processor search failed for {domain}: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "domain": domain,
+            "subprocessors": []
+        }
+
 if __name__ == "__main__":
     import uvicorn
     
