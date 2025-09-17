@@ -1295,7 +1295,129 @@ class DynamicComplianceDiscovery:
         except:
             pass
         return "Unknown"
-    
+
+    async def _discover_general_compliance_resources(self, vendor_domain: str) -> List[Dict[str, Any]]:
+        """Discover general compliance resources when no dedicated trust center is found"""
+        
+        compliance_resources = []
+        
+        # Common compliance-related URLs to check
+        compliance_urls = [
+            f"https://{vendor_domain}/privacy",
+            f"https://{vendor_domain}/privacy-policy", 
+            f"https://{vendor_domain}/legal",
+            f"https://{vendor_domain}/legal/privacy",
+            f"https://{vendor_domain}/security",
+            f"https://{vendor_domain}/compliance",
+            f"https://{vendor_domain}/gdpr",
+            f"https://{vendor_domain}/ccpa",
+            f"https://{vendor_domain}/about/security",
+            f"https://{vendor_domain}/company/security",
+            f"https://help.{vendor_domain}/security",
+            f"https://support.{vendor_domain}/security"
+        ]
+        
+        import requests
+        
+        for url in compliance_urls:
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (compatible; compliance-scanner/1.0)',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                }
+                response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
+                
+                if response.status_code == 200:
+                    content = response.text
+                    resource_score = self._calculate_compliance_resource_score(content)
+                    resource_type = self._classify_compliance_resource(content, url)
+                    
+                    if resource_score > 0.2:  # Lower threshold for general compliance resources
+                        compliance_resources.append({
+                            "url": response.url,
+                            "original_url": url,
+                            "resource_score": resource_score,
+                            "resource_type": resource_type,
+                            "content_length": len(content),
+                            "page_title": self._extract_page_title(content),
+                            "source": "compliance_resource_discovery"
+                        })
+                        logger.info(f"🔍 Found compliance resource: {response.url} (type: {resource_type}, score: {resource_score:.2f})")
+            
+            except Exception as e:
+                logger.debug(f"Failed to access compliance resource {url}: {str(e)}")
+                continue
+        
+        # Sort by resource score
+        compliance_resources.sort(key=lambda x: x["resource_score"], reverse=True)
+        return compliance_resources
+
+    def _calculate_compliance_resource_score(self, content: str) -> float:
+        """Calculate how relevant a page is for compliance information"""
+        
+        content_lower = content.lower()
+        score = 0.0
+        
+        # Privacy policy indicators
+        privacy_indicators = ["privacy policy", "data protection", "personal information", "data collection", "cookies"]
+        for indicator in privacy_indicators:
+            if indicator in content_lower:
+                score += 0.15
+        
+        # Security documentation indicators
+        security_indicators = ["security", "encryption", "data security", "security measures", "secure"]
+        for indicator in security_indicators:
+            if indicator in content_lower:
+                score += 0.1
+        
+        # Compliance framework mentions
+        framework_indicators = ["gdpr", "ccpa", "hipaa", "pci", "soc 2", "iso 27001", "compliance"]
+        for indicator in framework_indicators:
+            if indicator in content_lower:
+                score += 0.2
+        
+        # Legal/regulatory content
+        legal_indicators = ["terms of service", "legal", "regulations", "regulatory", "policy"]
+        for indicator in legal_indicators:
+            if indicator in content_lower:
+                score += 0.08
+        
+        # Document availability
+        document_indicators = ["download", "pdf", "document", "report", "certification"]
+        for indicator in document_indicators:
+            if indicator in content_lower:
+                score += 0.05
+        
+        return min(score, 1.0)  # Cap at 1.0
+
+    def _classify_compliance_resource(self, content: str, url: str) -> str:
+        """Classify the type of compliance resource"""
+        
+        content_lower = content.lower()
+        url_lower = url.lower()
+        
+        # Check URL patterns first
+        if any(pattern in url_lower for pattern in ["/privacy", "/privacy-policy"]):
+            return "Privacy Policy"
+        elif "/security" in url_lower:
+            return "Security Documentation"
+        elif "/legal" in url_lower:
+            return "Legal Documentation"
+        elif any(pattern in url_lower for pattern in ["/gdpr", "/ccpa", "/compliance"]):
+            return "Compliance Framework"
+        
+        # Check content patterns
+        if "privacy policy" in content_lower and ("personal" in content_lower or "data" in content_lower):
+            return "Privacy Policy"
+        elif any(indicator in content_lower for indicator in ["security", "encryption", "secure"]):
+            return "Security Documentation"
+        elif any(indicator in content_lower for indicator in ["gdpr", "ccpa", "hipaa", "pci", "soc"]):
+            return "Compliance Framework"
+        elif "legal" in content_lower or "terms" in content_lower:
+            return "Legal Documentation"
+        else:
+            return "General Compliance Resource"
+
     async def _scan_compliance_documents(self, vendor_domain: str, frameworks: List[str], trust_centers: List[Dict]) -> List[Dict[str, Any]]:
         """Scan for specific compliance documents - optimized to scan fewer URLs"""
         
@@ -4596,13 +4718,10 @@ async def run_real_assessment(assessment_id: str, request_data: CreateAssessment
         vendor_domain = request_data.vendor_domain
         vendor_name = vendor_domain.split('.')[0].title()
         
-        logger.info(f"� Starting standard real assessment for {vendor_domain}")
-        
-        # Update progress
-        assessment_results[assessment_id]["progress"] = 10
-        assessment_results[assessment_id]["status"] = "initializing_standard_assessment"
+        logger.info(f"🔍 Starting standard real assessment for {vendor_domain}")
         
         # Run standard comprehensive assessment using the comprehensive function
+        # (Don't manually set progress - let ProgressTracker handle it)
         await run_comprehensive_real_assessment(assessment_id, request_data)
         
         logger.info(f"✅ Standard assessment completed for {vendor_domain}")
@@ -4612,7 +4731,7 @@ async def run_real_assessment(assessment_id: str, request_data: CreateAssessment
         logger.error(f"❌ Real assessment failed for {assessment_id}: {str(e)}")
         assessment_results[assessment_id]["status"] = "failed"
         assessment_results[assessment_id]["error"] = str(e)
-        assessment_results[assessment_id]["progress"] = 100
+        # Don't manually set progress to 100% - let error handling in comprehensive assessment handle it
         
     except Exception as e:
         logger.error(f"❌ Enhanced real assessment failed for {assessment_id}: {str(e)}")
@@ -4760,111 +4879,283 @@ async def run_real_assessment_legacy(assessment_id: str, request_data: dict):
         assessment_results[assessment_id]["error"] = str(e)
         print(f"Assessment error: {e}")
 
+class ProgressTracker:
+    """Enhanced progress tracking for assessments with steady incremental updates"""
+    
+    def __init__(self, assessment_id: str):
+        self.assessment_id = assessment_id
+        self.total_steps = 8  # Total major assessment steps
+        self.current_step = 0
+        self.step_progress = 0
+        self.start_time = time.time()
+        self.estimated_duration = 150  # Estimated total seconds (2.5 minutes)
+        
+        # Progress milestones for each major step
+        self.steps = [
+            {"name": "Initializing Assessment", "weight": 5},      # 0-5%
+            {"name": "Setting up Discovery Engine", "weight": 10}, # 5-15%  
+            {"name": "Running Data Breach Scan", "weight": 15},    # 15-30%
+            {"name": "Analyzing Privacy Practices", "weight": 15}, # 30-45%
+            {"name": "Scanning AI Services", "weight": 15},       # 45-60%
+            {"name": "Discovering Compliance Documents", "weight": 15}, # 60-75%
+            {"name": "Finding Trust Centers", "weight": 10},      # 75-85%
+            {"name": "Finalizing Assessment", "weight": 15}       # 85-100%
+        ]
+        
+    def start_step(self, step_index: int):
+        """Start a new step and update progress"""
+        if step_index < len(self.steps):
+            self.current_step = step_index
+            self.step_progress = 0
+            
+            # Calculate base progress up to this step
+            base_progress = sum(step["weight"] for step in self.steps[:step_index])
+            
+            self.update_progress(base_progress, self.steps[step_index]["name"])
+    
+    def update_step_progress(self, step_percentage: float):
+        """Update progress within the current step (0-100)"""
+        if self.current_step < len(self.steps):
+            # Calculate base progress from previous steps
+            base_progress = sum(step["weight"] for step in self.steps[:self.current_step])
+            
+            # Add current step progress
+            step_weight = self.steps[self.current_step]["weight"]
+            step_contribution = (step_percentage / 100) * step_weight
+            
+            total_progress = base_progress + step_contribution
+            
+            self.update_progress(
+                min(total_progress, 100), 
+                self.steps[self.current_step]["name"],
+                step_percentage
+            )
+    
+    def update_progress(self, percentage: float, status: str, step_percentage: float = None):
+        """Update the overall progress"""
+        import time as time_module  # Avoid naming conflicts
+        elapsed_time = time_module.time() - self.start_time
+        
+        # Calculate estimated time remaining
+        if percentage > 5:  # After initial setup
+            time_per_percent = elapsed_time / percentage
+            estimated_total_time = time_per_percent * 100
+            time_remaining = max(0, estimated_total_time - elapsed_time)
+        else:
+            time_remaining = self.estimated_duration
+        
+        # Format time remaining
+        if time_remaining > 60:
+            time_str = f"{int(time_remaining // 60)}m {int(time_remaining % 60)}s"
+        else:
+            time_str = f"{int(time_remaining)}s"
+        
+        # Update assessment results with detailed info
+        assessment_results[self.assessment_id].update({
+            "progress": round(percentage, 1),
+            "status": status,
+            "current_step": self.current_step + 1,
+            "total_steps": self.total_steps,
+            "step_progress": step_percentage,
+            "estimated_time_remaining": time_str,
+            "elapsed_time": f"{int(elapsed_time)}s"
+        })
+        
+        logger.info(f"📊 Assessment {self.assessment_id}: {percentage:.1f}% - {status} (ETA: {time_str})")
+        
+        # Add small delay to make progress more visible in UI
+        time_module.sleep(0.3)
+
 async def run_comprehensive_real_assessment(assessment_id: str, request_data: CreateAssessmentRequest):
-    """Run comprehensive real assessment using actual web scanning and data collection"""
+    """Run comprehensive real assessment using actual web scanning and data collection with enhanced progress tracking"""
     try:
         vendor_domain = request_data.vendor_domain
         vendor_name = vendor_domain.split('.')[0].title()
         
         logger.info(f"🔍 Starting comprehensive real assessment for {vendor_domain}")
         
-        # Update progress - initializing
-        assessment_results[assessment_id]["progress"] = 5
-        assessment_results[assessment_id]["status"] = "initializing_real_assessment"
+        # Initialize enhanced progress tracker
+        progress = ProgressTracker(assessment_id)
         
-        # Initialize discovery engine
+        # Step 1: Initialize assessment
+        progress.start_step(0)
+        await asyncio.sleep(0.5)  # Small delay to show initialization
+        
+        # Step 2: Setup discovery engines
+        progress.start_step(1)
+        progress.update_step_progress(20)
+        
         discovery_engine = DynamicComplianceDiscovery()
-        trust_center_integrator = TrustCenterIntegrator()
+        progress.update_step_progress(60)
         
-        # Update progress - running parallel scans
-        assessment_results[assessment_id]["progress"] = 15
-        assessment_results[assessment_id]["status"] = "running_parallel_scans"
+        trust_center_integrator = TrustCenterIntegrator()
+        progress.update_step_progress(100)
+        
+        # Step 3: Start parallel scans setup
+        progress.start_step(2)
         
         # Run multiple scans in parallel for faster processing
         logger.info(f"🚀 Starting parallel scans for {vendor_domain}")
         
         # Create parallel tasks for independent scans
         scan_tasks = []
+        completed_scans = 0
+        total_scans = 6
         
-        # Breach scanning task
+        # Enhanced breach scanning task with progress updates
         async def breach_scan():
+            nonlocal completed_scans
             try:
                 result = await scan_data_breaches(vendor_domain, vendor_name)
+                completed_scans += 1
                 logger.info(f"✅ Breach scan completed for {vendor_domain} - {result['breaches_found']} breaches found")
                 return ("breach_scan", result)
             except Exception as e:
+                completed_scans += 1
                 logger.warning(f"⚠️ Breach scan error for {vendor_domain}: {str(e)}")
                 return ("breach_scan", {"error": str(e), "breaches_found": 0, "security_track_record": "No data available", "breach_severity": "unknown"})
         
-        # Privacy scanning task
+        # Enhanced privacy scanning task
         async def privacy_scan():
+            nonlocal completed_scans
             try:
                 result = await scan_privacy_practices(vendor_domain, vendor_name)
+                completed_scans += 1
                 logger.info(f"✅ Privacy scan completed for {vendor_domain} - compliance score: {result.get('compliance_score', 'Unknown')}")
                 return ("privacy_scan", result)
             except Exception as e:
+                completed_scans += 1
                 logger.warning(f"⚠️ Privacy scan error for {vendor_domain}: {str(e)}")
                 return ("privacy_scan", {"error": str(e), "compliance_score": 0, "privacy_framework": "Not detected", "data_collection_practices": "unknown"})
         
-        # AI services scanning task
+        # Enhanced AI services scanning task
         async def ai_scan():
+            nonlocal completed_scans
             try:
                 result = await scan_ai_services(vendor_domain, vendor_name)
+                completed_scans += 1
                 logger.info(f"✅ AI services scan completed for {vendor_domain} - maturity level: {result.get('ai_maturity_level', 'No AI Services')}")
                 return ("ai_scan", result)
             except Exception as e:
+                completed_scans += 1
                 logger.warning(f"⚠️ AI services scan error for {vendor_domain}: {str(e)}")
                 return ("ai_scan", {"error": str(e), "offers_ai_services": False, "ai_maturity_level": "Not detected", "ai_frameworks": []})
         
-        # Compliance discovery task
+        # Enhanced compliance discovery task
         async def compliance_scan():
+            nonlocal completed_scans
             try:
                 result = await discovery_engine.discover_vendor_compliance(
                     vendor_domain, 
                     request_data.regulations or ["gdpr", "soc2", "iso27001"]
                 )
+                completed_scans += 1
                 logger.info(f"✅ Compliance discovery completed for {vendor_domain} - found {len(result.get('compliance_documents', []))} documents")
                 return ("compliance_scan", result)
             except Exception as e:
+                completed_scans += 1
                 logger.warning(f"⚠️ Compliance discovery error for {vendor_domain}: {str(e)}")
                 return ("compliance_scan", {"error": str(e), "compliance_documents": [], "trust_centers": [], "frameworks_found": []})
         
-        # Trust center discovery task
+        # Enhanced trust center discovery task
         async def trust_center_scan():
+            nonlocal completed_scans
             try:
                 result = await trust_center_integrator.discover_trust_center(vendor_domain)
+                completed_scans += 1
                 logger.info(f"✅ Trust center discovery completed for {vendor_domain} - type: {result.get('trust_center_type', 'None')}")
                 return ("trust_center_scan", result)
             except Exception as e:
+                completed_scans += 1
                 logger.warning(f"⚠️ Trust center discovery error for {vendor_domain}: {str(e)}")
                 return ("trust_center_scan", {"error": str(e), "trust_center_found": False, "trust_center_type": "none", "access_methods": []})
         
-        # Data flow scanning task
+        # Enhanced data flow scanning task
         async def data_flow_scan():
+            nonlocal completed_scans
             try:
                 result = await scan_data_flows(vendor_domain, vendor_name)
+                completed_scans += 1
                 logger.info(f"✅ Data flow scan completed for {vendor_domain}")
                 return ("data_flow_scan", result)
             except Exception as e:
+                completed_scans += 1
                 logger.warning(f"⚠️ Data flow scan error for {vendor_domain}: {str(e)}")
                 return ("data_flow_scan", {"error": str(e), "data_flows": [], "third_party_integrations": [], "data_residency": "unknown"})
         
-        # Execute all scans in parallel
+        # Execute all scans in parallel - convert coroutines to tasks
         scan_tasks = [
-            breach_scan(),
-            privacy_scan(), 
-            ai_scan(),
-            compliance_scan(),
-            trust_center_scan(),
-            data_flow_scan()
+            asyncio.create_task(breach_scan()),
+            asyncio.create_task(privacy_scan()),
+            asyncio.create_task(ai_scan()),
+            asyncio.create_task(compliance_scan()),
+            asyncio.create_task(trust_center_scan()),
+            asyncio.create_task(data_flow_scan())
         ]
         
-        # Update progress - waiting for parallel scans
-        assessment_results[assessment_id]["progress"] = 35
-        assessment_results[assessment_id]["status"] = "processing_parallel_scans"
+        # Start monitoring parallel scans
+        progress.update_step_progress(25)
         
-        # Wait for all scans to complete in parallel
+        # Wait for all scans to complete in parallel with periodic progress updates
+        async def monitor_parallel_scans():
+            """Monitor parallel scans and advance through steps 2-6 as scans complete"""
+            start_time = time.time()
+            max_wait_time = 120  # 2 minutes max for parallel scans
+            last_completed = 0
+            current_step_index = 2  # Start at step 2 (breach scan)
+            
+            while True:
+                # Check if all tasks are done (now we can call .done() on Task objects)
+                done_count = sum(1 for task in scan_tasks if task.done())
+                
+                if done_count == len(scan_tasks):
+                    break
+                
+                # Advance to next step if we've hit a threshold
+                if done_count > last_completed:
+                    # Calculate which step we should be on based on completions
+                    target_step = min(2 + done_count, 6)  # Steps 2-6 based on scan completions
+                    
+                    if target_step > current_step_index:
+                        # Move to next step
+                        current_step_index = target_step
+                        progress.start_step(current_step_index)
+                        progress.update_step_progress(20)
+                    else:
+                        # Update progress within current step
+                        step_progress = min(90, 20 + (done_count * 15))
+                        progress.update_step_progress(step_progress)
+                    
+                    last_completed = done_count
+                
+                # Safety timeout
+                if time.time() - start_time > max_wait_time:
+                    logger.warning(f"⚠️ Parallel scan timeout after {max_wait_time}s for {vendor_domain}")
+                    break
+                    
+                await asyncio.sleep(2)  # Check every 2 seconds
+            
+            return done_count
+        
+        # Step 2 complete: Begin parallel scanning phase (steps 2-6)
+        progress.update_step_progress(20)
+        
+        # Start monitoring while scans run (this will handle scanning progress across steps 2-6)
+        monitoring_task = asyncio.create_task(monitor_parallel_scans())
+        
+        # Wait for all scans to complete
         scan_results = await asyncio.gather(*scan_tasks, return_exceptions=True)
+        
+        # Ensure monitoring task is complete
+        await monitoring_task
+        
+        # Complete step 6 (Trust center finding)
+        progress.start_step(6)  # Trust center step
+        progress.update_step_progress(95)
+        
+        # Step 7: Process scan results (Finalizing Assessment)
+        progress.start_step(7)
+        progress.update_step_progress(10)
         
         # Process results from parallel scans
         breach_scan_result = {}
@@ -4873,6 +5164,8 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         compliance_discovery = {}
         trust_center_info = {}
         data_flow_result = {}
+        
+        progress.update_step_progress(25)
         
         for result in scan_results:
             if isinstance(result, Exception):
@@ -4893,11 +5186,11 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             elif scan_type == "data_flow_scan":
                 data_flow_result = data
         
+        progress.update_step_progress(50)
         logger.info(f"🎯 Parallel scans completed for {vendor_domain}")
         
-        # Update progress - AI-powered assessment analysis
-        assessment_results[assessment_id]["progress"] = 70
-        assessment_results[assessment_id]["status"] = "ai_powered_analysis"
+        # Start AI-powered analysis
+        progress.update_step_progress(60)
         
         # Collect all scan data for AI analysis
         collected_data = {
@@ -4933,13 +5226,11 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         )
         logger.info(f"✅ Standard assessment completed for {vendor_domain} - risk level: {real_results.get('risk_level', 'unknown')}")
         
-        # Update progress - generating assessment results
-        assessment_results[assessment_id]["progress"] = 75
-        assessment_results[assessment_id]["status"] = "generating_real_assessment_results"
+        # Update progress using ProgressTracker - generating assessment results
+        progress.update_step_progress(75)
         
-        # Update progress - finalizing
-        assessment_results[assessment_id]["progress"] = 90
-        assessment_results[assessment_id]["status"] = "finalizing_real_results"
+        # Update progress using ProgressTracker - finalizing
+        progress.update_step_progress(90)
         
         # Convert to user-friendly format and store
         real_results["assessment_mode"] = request_data.assessment_mode
@@ -4967,9 +5258,11 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             "assessment_type": "comprehensive_real_assessment"
         }
         
-        # Final update
-        assessment_results[assessment_id]["progress"] = 100
-        assessment_results[assessment_id]["status"] = "completed"
+        # Final progress update - assessment complete
+        progress.update_step_progress(90)
+        
+        # Final completion
+        progress.update_progress(100, "completed", "Assessment finished successfully!")
         assessment_results[assessment_id]["results"] = comprehensive_results
         
         # Update storage
@@ -5003,7 +5296,8 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         
     except Exception as e:
         logger.error(f"❌ Comprehensive real assessment failed for {assessment_id}: {str(e)}")
-        assessment_results[assessment_id]["status"] = "error"
+        # Update error status through assessment_results (not ProgressTracker since it failed)
+        assessment_results[assessment_id]["status"] = "error" 
         assessment_results[assessment_id]["error"] = str(e)
         assessment_results[assessment_id]["progress"] = 0
         
@@ -7249,45 +7543,258 @@ async def process_single_vendor_assessment(vendor, bulk_job):
 
 @app.get("/api/v1/trust-center/discover/{domain}")
 async def discover_trust_center(domain: str):
-    """Discover if a vendor has a trust center"""
+    """Discover vendor trust centers and compliance resources using AI-powered analysis"""
     try:
-        # Common trust center URL patterns
-        trust_center_patterns = [
-            f"https://trust.{domain}",
-            f"https://security.{domain}",
-            f"https://compliance.{domain}",
-            f"https://{domain}/trust",
-            f"https://{domain}/security",
-            f"https://{domain}/compliance",
-            f"https://{domain}/trust-center",
-            f"https://{domain}/security-center"
-        ]
+        logger.info(f"🔍 Starting AI-powered trust center discovery for {domain}")
         
-        # Mock discovery logic - in real implementation, would check if URLs exist
-        domain_lower = domain.lower()
-        if domain_lower in ["github.com", "slack.com", "zoom.us", "salesforce.com", "aws.amazon.com"]:
-            logger.info(f"🔍 Found known vendor {domain}, using public_access method")
+        # Step 1: Use existing trust center discovery logic
+        compliance_scanner = DynamicComplianceDiscovery()
+        trust_centers = await compliance_scanner._discover_trust_centers(domain)
+        
+        # Step 2: If no dedicated trust centers found, look for general compliance resources
+        compliance_resources = []
+        if len(trust_centers) == 0:
+            logger.info(f"🔍 No dedicated trust centers found for {domain}, searching for general compliance resources...")
+            compliance_resources = await compliance_scanner._discover_general_compliance_resources(domain)
+            
+            # Step 3: Enhance with OpenAI analysis for better detection
+            ai_suggestions = await _get_ai_compliance_suggestions(domain)
+            if ai_suggestions:
+                compliance_resources.extend(ai_suggestions)
+        
+        # Step 4: If still nothing found, use original AI suggestions for trust centers
+        if len(trust_centers) == 0 and len(compliance_resources) == 0:
+            ai_suggestions = await _get_ai_trust_center_suggestions(domain)
+            if ai_suggestions:
+                trust_centers.extend(ai_suggestions)
+        
+        # Prepare response based on what we found
+        total_resources = len(trust_centers) + len(compliance_resources)
+        
+        if total_resources > 0:
+            logger.info(f"✅ Found {len(trust_centers)} trust centers and {len(compliance_resources)} compliance resources for {domain}")
+            
+            # Sort by scores (highest first)
+            trust_centers.sort(key=lambda x: x.get('trust_score', 0), reverse=True)
+            compliance_resources.sort(key=lambda x: x.get('resource_score', 0), reverse=True)
+            
             return {
                 "success": True,
-                "trust_center_info": {
-                    "trust_center_url": f"https://trust.{domain}",
-                    "access_method": "public_access",
-                    "supported_documents": ["SOC 2 Type 2", "ISO 27001", "PCI DSS"],
-                    "estimated_response_time": "Immediate"
-                }
+                "domain": domain,
+                "trust_centers_found": len(trust_centers),
+                "compliance_resources_found": len(compliance_resources),
+                "trust_centers": trust_centers[:3],  # Return top 3 trust centers
+                "compliance_resources": compliance_resources[:5],  # Return top 5 compliance resources
+                "discovery_method": "enhanced_compliance_discovery",
+                "timestamp": datetime.now().isoformat(),
+                "message": "Found compliance-related resources for this domain"
             }
         else:
-            logger.info(f"🔍 Unknown vendor {domain}, no trust center found")
+            logger.info(f"❌ No trust centers or compliance resources found for {domain}")
             return {
                 "success": False,
-                "message": "No trust center found for this domain"
+                "domain": domain,
+                "trust_centers_found": 0,
+                "compliance_resources_found": 0,
+                "message": "No trust centers or compliance documentation found for this domain",
+                "suggestions": [
+                    f"Try visiting {domain} directly and look for 'Security', 'Trust', 'Compliance', 'Privacy', or 'Legal' links",
+                    "Check if the vendor has subdomains like trust.{domain}, security.{domain}, or help.{domain}",
+                    "Look for footer links on the main website that lead to privacy policies or security information",
+                    "Contact the vendor directly for access to their security documentation"
+                ]
             }
     except Exception as e:
-        logger.error(f"Trust center discovery failed: {str(e)}")
+        logger.error(f"❌ Trust center discovery failed for {domain}: {str(e)}")
         return {
             "success": False,
+            "domain": domain,
             "message": f"Discovery failed: {str(e)}"
         }
+
+async def _get_ai_trust_center_suggestions(domain: str) -> List[Dict[str, Any]]:
+    """Use OpenAI to suggest potential trust center URLs for a domain"""
+    try:
+        prompt = f"""Analyze the domain "{domain}" and suggest the most likely URLs where this company might host their trust center, security documentation, or compliance information.
+
+Consider common patterns like:
+- trust.{domain}
+- security.{domain}  
+- {domain}/trust
+- {domain}/security
+- {domain}/compliance
+- {domain}/legal
+
+Return a JSON array of the 3 most likely URLs with confidence scores, like:
+[
+    {{"url": "https://trust.{domain}", "confidence": 0.9, "reasoning": "Most common pattern for trust centers"}},
+    {{"url": "https://{domain}/security", "confidence": 0.8, "reasoning": "Standard security page pattern"}}
+]"""
+
+        if not OPENAI_CLIENT:
+            logger.warning("OpenAI client not available for trust center suggestions")
+            return []
+
+        response = await OPENAI_CLIENT.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a security analyst expert in finding vendor trust centers and compliance documentation. Return only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=500,
+            temperature=0.3
+        )
+
+        ai_response = response.choices[0].message.content.strip()
+        logger.info(f"🤖 OpenAI trust center suggestions for {domain}: {ai_response}")
+
+        # Parse AI response
+        import json
+        suggestions = json.loads(ai_response)
+        
+        # Convert to our format and test URLs
+        ai_trust_centers = []
+        for suggestion in suggestions[:3]:  # Limit to top 3
+            url = suggestion.get('url', '')
+            confidence = suggestion.get('confidence', 0.5)
+            reasoning = suggestion.get('reasoning', 'AI suggested')
+            
+            if url and confidence > 0.6:  # Only include high-confidence suggestions
+                # Test if URL is accessible
+                try:
+                    import requests
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (compatible; trust-center-scanner/1.0)',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                    response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
+                    
+                    if response.status_code == 200:
+                        content = response.text.lower()
+                        
+                        # Calculate trust score based on content
+                        trust_indicators = ['trust', 'security', 'compliance', 'audit', 'certification', 'soc', 'iso', 'gdpr']
+                        trust_score = sum(1 for indicator in trust_indicators if indicator in content) / len(trust_indicators)
+                        
+                        if trust_score > 0.2:  # Threshold for trust center content
+                            ai_trust_centers.append({
+                                "url": response.url,
+                                "original_url": url,
+                                "trust_score": round(trust_score, 2),
+                                "confidence": confidence,
+                                "reasoning": reasoning,
+                                "content_length": len(content),
+                                "page_title": _extract_page_title(response.text),
+                                "source": "ai_suggested"
+                            })
+                            
+                except Exception as e:
+                    logger.debug(f"Failed to test AI-suggested URL {url}: {str(e)}")
+                    continue
+        
+        return ai_trust_centers
+        
+    except Exception as e:
+        logger.error(f"Failed to get AI trust center suggestions: {str(e)}")
+        return []
+
+async def _get_ai_compliance_suggestions(domain: str) -> List[Dict[str, Any]]:
+    """Use OpenAI to suggest potential compliance resource URLs for a domain"""
+    try:
+        prompt = f"""Analyze the domain "{domain}" and suggest the most likely URLs where this company might host their compliance resources, privacy policies, security documentation, or legal information.
+
+Focus on finding general compliance resources like:
+- {domain}/privacy or {domain}/privacy-policy
+- {domain}/security or {domain}/about/security
+- {domain}/legal or {domain}/legal/privacy
+- {domain}/compliance or {domain}/gdpr or {domain}/ccpa
+- help.{domain}/security or support.{domain}/privacy
+
+Return a JSON array of the 4 most likely URLs with confidence scores and resource type, like:
+[
+    {{"url": "https://{domain}/privacy", "confidence": 0.9, "resource_type": "Privacy Policy", "reasoning": "Standard privacy policy location"}},
+    {{"url": "https://{domain}/security", "confidence": 0.8, "resource_type": "Security Documentation", "reasoning": "Common security page pattern"}}
+]"""
+
+        if not OPENAI_CLIENT:
+            logger.warning("OpenAI client not available for compliance suggestions")
+            return []
+
+        response = await OPENAI_CLIENT.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a compliance expert at finding privacy policies, security documentation, and legal resources on company websites. Return only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=600,
+            temperature=0.3
+        )
+
+        ai_response = response.choices[0].message.content.strip()
+        logger.info(f"🤖 OpenAI compliance suggestions for {domain}: {ai_response}")
+
+        # Parse AI response
+        import json
+        suggestions = json.loads(ai_response)
+        
+        # Convert to our format and test URLs
+        ai_compliance_resources = []
+        for suggestion in suggestions[:4]:  # Limit to top 4
+            url = suggestion.get('url', '')
+            confidence = suggestion.get('confidence', 0.5)
+            resource_type = suggestion.get('resource_type', 'General Compliance Resource')
+            reasoning = suggestion.get('reasoning', 'AI suggested')
+            
+            if url and confidence > 0.5:  # Lower threshold for compliance resources
+                # Test if URL is accessible
+                try:
+                    import requests
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (compatible; compliance-scanner/1.0)',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                    response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
+                    
+                    if response.status_code == 200:
+                        content = response.text.lower()
+                        
+                        # Calculate compliance resource score
+                        compliance_indicators = ['privacy', 'security', 'compliance', 'gdpr', 'ccpa', 'legal', 'data protection', 'policy']
+                        resource_score = sum(1 for indicator in compliance_indicators if indicator in content) / len(compliance_indicators)
+                        
+                        if resource_score > 0.1:  # Lower threshold for general compliance
+                            ai_compliance_resources.append({
+                                "url": response.url,
+                                "original_url": url,
+                                "resource_score": round(resource_score, 2),
+                                "confidence": confidence,
+                                "resource_type": resource_type,
+                                "reasoning": reasoning,
+                                "content_length": len(content),
+                                "page_title": _extract_page_title(response.text),
+                                "source": "ai_compliance_suggested"
+                            })
+                            
+                except Exception as e:
+                    logger.debug(f"Failed to test AI-suggested compliance URL {url}: {str(e)}")
+                    continue
+        
+        return ai_compliance_resources
+        
+    except Exception as e:
+        logger.error(f"Failed to get AI compliance suggestions: {str(e)}")
+        return []
+
+def _extract_page_title(html_content: str) -> str:
+    """Extract page title from HTML content"""
+    try:
+        import re
+        match = re.search(r'<title[^>]*>([^<]+)</title>', html_content, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        return "No title found"
+    except:
+        return "Title extraction failed"
 
 @app.post("/api/v1/trust-center/request-access")
 async def request_trust_center_access(request: dict):
