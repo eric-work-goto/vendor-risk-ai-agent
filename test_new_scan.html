@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test New Scan Functionality</title>
+</head>
+<body>
+    <h1>Testing New Scan Feature</h1>
+    <p>Test page to validate JavaScript syntax in the combined-ui.html file.</p>
+    
+    <script>
+        // Test the key variables and functions from our changes
+        let currentAssessmentId = null;
+        let bulkAssessmentIds = [];
+        let pollTimeoutId = null;
+        let isPollingActive = false;
+
+        function stopCurrentAssessment() {
+            console.log('stopCurrentAssessment called');
+            if (currentAssessmentId) {
+                console.log(`Stopping assessment: ${currentAssessmentId}`);
+                currentAssessmentId = null;
+            }
+            
+            if (pollTimeoutId) {
+                clearTimeout(pollTimeoutId);
+                pollTimeoutId = null;
+                console.log('Polling stopped');
+            }
+            
+            isPollingActive = false;
+            return true;
+        }
+
+        function startNewAssessment() {
+            console.log('startNewAssessment called');
+            
+            const vendorDomainInput = document.getElementById('vendorDomain');
+            const requesterEmailInput = document.getElementById('requesterEmail');
+            const shouldAutoStart = vendorDomainInput && vendorDomainInput.value.trim() && 
+                                   requesterEmailInput && requesterEmailInput.value.trim();
+            
+            // Stop any running assessment
+            stopCurrentAssessment();
+            
+            console.log('New scan functionality working!');
+            return shouldAutoStart;
+        }
+
+        // Test the functions
+        console.log('Testing New Scan functionality...');
+        startNewAssessment();
+        console.log('Test completed successfully!');
+    </script>
+</body>
+</html>

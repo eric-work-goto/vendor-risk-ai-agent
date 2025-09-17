@@ -1,0 +1,6 @@
+vendor_domain,vendor_name,regulations,data_sensitivity,business_criticality,auto_trust_center
+google.com,Google LLC,GDPR;SOC2;ISO27001,high,critical,true
+microsoft.com,Microsoft Corporation,GDPR;SOC2;ISO27001;FedRAMP,high,critical,true
+salesforce.com,Salesforce Inc,GDPR;SOC2;CCPA,medium,high,true
+slack.com,Slack Technologies,GDPR;SOC2,medium,medium,true
+zoom.us,Zoom Video Communications,GDPR;SOC2;HIPAA,high,high,true

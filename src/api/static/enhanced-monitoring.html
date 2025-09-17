@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vendor Risk Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .dropdown-content { 
+            display: none; 
+            background: white; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 6px; 
+            margin-top: 8px; 
+            padding: 12px; 
+        }
+        .clickable-row { 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+        }
+        .clickable-row:hover { 
+            background-color: rgba(0, 0, 0, 0.05); 
+        }
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #10b981; }
+        .status-checking { background-color: #f59e0b; }
+        .status-error { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-shield-alt text-blue-600 mr-3"></i>
+                Vendor Risk Monitoring Dashboard
+            </h1>
+            <div class="flex items-center text-sm text-gray-600">
+                <span class="status-indicator status-online"></span>
+                <span id="systemStatus">Monitoring System Active</span>
+                <span class="mx-2">•</span>
+                <span id="lastUpdate">Last updated: Loading...</span>
+            </div>
+        </div>
+        
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-600">Monitored Vendors</p>
+                        <p id="statsVendors" class="text-2xl font-bold text-gray-900">-</p>
+                    </div>
+                    <div class="p-3 bg-blue-100 rounded-full">
+                        <i class="fas fa-building text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-600">Recent Alerts</p>
+                        <p id="statsAlerts" class="text-2xl font-bold text-red-600">-</p>
+                    </div>
+                    <div class="p-3 bg-red-100 rounded-full">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-600">Score Changes</p>
+                        <p id="statsScoreChanges" class="text-2xl font-bold text-yellow-600">-</p>
+                    </div>
+                    <div class="p-3 bg-yellow-100 rounded-full">
+                        <i class="fas fa-chart-line text-yellow-600"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-600">Avg Risk Score</p>
+                        <p id="statsAvgScore" class="text-2xl font-bold text-green-600">-</p>
+                    </div>
+                    <div class="p-3 bg-green-100 rounded-full">
+                        <i class="fas fa-shield-check text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-eye text-green-500 mr-2"></i>
+                    Continuous Monitoring
+                </h2>
+                <button onclick="refreshData()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">
+                    <i class="fas fa-sync-alt mr-2"></i>
+                    Refresh
+                </button>
+            </div>
+            
+            <!-- Monitored Vendors -->
+            <div class="mb-8">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                    <i class="fas fa-building text-blue-500 mr-2"></i>
+                    Monitored Vendors
+                </h3>
+                <div id="monitoredVendorsList" class="space-y-2">
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin text-gray-400 text-2xl mb-2"></i>
+                        <p class="text-gray-500">Loading monitored vendors...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Alerts -->
+            <div class="mb-8">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                    <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
+                    Recent Alerts
+                    <span class="ml-2 text-xs text-gray-500">(Click to expand details)</span>
+                </h3>
+                <div id="recentAlerts" class="space-y-2">
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin text-gray-400 text-2xl mb-2"></i>
+                        <p class="text-gray-500">Loading recent alerts...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Score Changes -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                    <i class="fas fa-chart-line text-yellow-500 mr-2"></i>
+                    Score Changes
+                    <span class="ml-2 text-xs text-gray-500">(Click to expand details)</span>
+                </h3>
+                <div id="scoreChanges" class="space-y-2">
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin text-gray-400 text-2xl mb-2"></i>
+                        <p class="text-gray-500">Loading score changes...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('🚀 Enhanced monitoring dashboard loading...');
+        
+        // Global state
+        var monitoringData = {
+            vendors: [],
+            alerts: [],
+            scoreChanges: []
+        };
+        
+        // API functions
+        function apiCall(endpoint, options) {
+            var baseUrl = window.location.protocol + '//' + window.location.host;
+            var url = baseUrl + '/api/v1/' + endpoint;
+            
+            var defaultOptions = {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            var finalOptions = Object.assign({}, defaultOptions, options || {});
+            
+            console.log('🌐 API Call:', url);
+            return fetch(url, finalOptions)
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .catch(function(error) {
+                    console.error('❌ API Error:', error);
+                    return { error: error.message };
+                });
+        }
+        
+        // Toggle function for dropdowns
+        function toggleAlertDetails(alertId) {
+            console.log('🔽 Toggling alert details for: ' + alertId);
+            var element = document.getElementById('details-' + alertId);
+            if (element) {
+                if (element.classList.contains('dropdown-content')) {
+                    if (element.style.display === 'none' || element.style.display === '') {
+                        element.style.display = 'block';
+                        console.log('✅ Showed details for: ' + alertId);
+                    } else {
+                        element.style.display = 'none';
+                        console.log('✅ Hidden details for: ' + alertId);
+                    }
+                } else {
+                    console.log('❌ Element is not a dropdown: details-' + alertId);
+                }
+            } else {
+                console.log('❌ Element not found: details-' + alertId);
+            }
+        }
+        
+        // Vendor logo handling
+        function getVendorLogo(domain) {
+            var cleanDomain = domain.toLowerCase().replace(/^www\./, '');
+            return 'https://logo.clearbit.com/' + cleanDomain + '?size=32&format=png';
+        }
+        
+        function handleLogoError(img, domain) {
+            var cleanDomain = domain.toLowerCase().replace(/^www\./, '');
+            img.src = 'https://icons.duckduckgo.com/ip3/' + cleanDomain + '.ico';
+        }
+        
+        // Refresh data function
+        function refreshData() {
+            console.log('🔄 Refreshing monitoring data...');
+            loadMonitoringData();
+        }
+        
+        // Load monitoring data from API or fallback to demo
+        function loadMonitoringData() {
+            console.log('🔄 Loading monitoring data...');
+            updateLastUpdateTime();
+            
+            // Try to load real data first, fallback to demo if needed
+            Promise.all([
+                loadVendorsData(),
+                loadAlertsData(), 
+                loadScoreChangesData()
+            ]).then(function() {
+                updateStats();
+                console.log('✅ All monitoring data loaded');
+            });
+        }
+        
+        function loadVendorsData() {
+            return apiCall('monitoring/vendors')
+                .then(function(data) {
+                    if (data.error) {
+                        console.log('📊 Using demo vendors data');
+                        loadDemoVendors();
+                        return;
+                    }
+                    console.log('✅ Real vendors data loaded:', data);
+                    displayVendors(data.vendors || []);
+                })
+                .catch(function(error) {
+                    console.log('📊 Fallback to demo vendors');
+                    loadDemoVendors();
+                });
+        }
+        
+        function loadAlertsData() {
+            return apiCall('monitoring/alerts')
+                .then(function(data) {
+                    if (data.error) {
+                        console.log('📊 Using demo alerts data');
+                        loadDemoAlerts();
+                        return;
+                    }
+                    console.log('✅ Real alerts data loaded:', data);
+                    displayAlerts(data.alerts || []);
+                })
+                .catch(function(error) {
+                    console.log('📊 Fallback to demo alerts');
+                    loadDemoAlerts();
+                });
+        }
+        
+        function loadScoreChangesData() {
+            return apiCall('monitoring/score-changes')
+                .then(function(data) {
+                    if (data.error) {
+                        console.log('📊 Using demo score changes data');
+                        loadDemoScoreChanges();
+                        return;
+                    }
+                    console.log('✅ Real score changes data loaded:', data);
+                    displayScoreChanges(data.changes || []);
+                })
+                .catch(function(error) {
+                    console.log('📊 Fallback to demo score changes');
+                    loadDemoScoreChanges();
+                });
+        }
+        
+        // Display functions
+        function displayVendors(vendors) {
+            monitoringData.vendors = vendors;
+            var html = '';
+            
+            if (vendors.length === 0) {
+                html = '<div class="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">';
+                html += '  <i class="fas fa-inbox text-4xl mb-3 text-gray-300"></i>';
+                html += '  <p class="font-medium">No vendors currently being monitored</p>';
+                html += '  <p class="text-sm mt-1">Add vendors from the Single Assessment tab to start monitoring</p>';
+                html += '</div>';
+            } else {
+                for (var i = 0; i < vendors.length; i++) {
+                    var vendor = vendors[i];
+                    var logoUrl = getVendorLogo(vendor.domain);
+                    var scoreClass = getScoreColorClass(vendor.current_score);
+                    var timeAgo = getTimeAgo(vendor.last_check);
+                    var statusIcon = getStatusIcon(vendor.status);
+                    
+                    html += '<div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors">';
+                    html += '  <div class="flex items-center">';
+                    html += '    <img src="' + logoUrl + '" alt="' + vendor.name + '" class="w-10 h-10 rounded-lg mr-4 border" ';
+                    html += '         onerror="handleLogoError(this, \'' + vendor.domain + '\')">';
+                    html += '    <div>';
+                    html += '      <div class="font-medium text-gray-900">' + vendor.name + '</div>';
+                    html += '      <div class="text-sm text-gray-500 flex items-center">';
+                    html += '        <span class="status-indicator ' + statusIcon.class + '"></span>';
+                    html += '        <span>' + vendor.domain + ' • ' + statusIcon.text + '</span>';
+                    html += '      </div>';
+                    html += '    </div>';
+                    html += '  </div>';
+                    html += '  <div class="text-right">';
+                    html += '    <div class="font-semibold ' + scoreClass + ' text-lg">Score: ' + (vendor.current_score || 'N/A') + '</div>';
+                    html += '    <div class="text-xs text-gray-500">Last checked: ' + timeAgo + '</div>';
+                    html += '  </div>';
+                    html += '</div>';
+                }
+            }
+            
+            document.getElementById('monitoredVendorsList').innerHTML = html;
+        }
+        
+        function displayAlerts(alerts) {
+            monitoringData.alerts = alerts;
+            var html = '';
+            
+            if (alerts.length === 0) {
+                html = '<div class="text-center py-8 text-gray-500 bg-green-50 rounded-lg border border-green-200">';
+                html += '  <i class="fas fa-shield-check text-4xl mb-3 text-green-400"></i>';
+                html += '  <p class="font-medium text-green-700">No recent alerts - All systems healthy</p>';
+                html += '  <p class="text-sm mt-1 text-green-600">Continuous monitoring is active</p>';
+                html += '</div>';
+            } else {
+                for (var i = 0; i < alerts.length; i++) {
+                    var alert = alerts[i];
+                    var alertId = 'alert' + i;
+                    var timeAgo = getTimeAgo(alert.timestamp);
+                    var severityClass = getSeverityClass(alert.severity);
+                    var severityIcon = getSeverityIcon(alert.severity);
+                    
+                    html += '<div class="p-4 ' + severityClass.bg + ' border ' + severityClass.border + ' rounded-lg clickable-row mb-3" onclick="toggleAlertDetails(\'' + alertId + '\')">';
+                    html += '  <div class="flex items-center justify-between">';
+                    html += '    <div class="flex-1">';
+                    html += '      <div class="flex items-center mb-1">';
+                    html += '        <i class="' + severityIcon + ' mr-2"></i>';
+                    html += '        <div class="font-medium ' + severityClass.text + '">' + alert.title + '</div>';
+                    html += '      </div>';
+                    html += '      <div class="text-sm ' + severityClass.subtext + '">' + alert.summary + '</div>';
+                    html += '    </div>';
+                    html += '    <div class="text-xs ' + severityClass.time + ' text-right">';
+                    html += '      <div>' + timeAgo + '</div>';
+                    html += '      <div class="mt-1"><i class="fas fa-chevron-down"></i></div>';
+                    html += '    </div>';
+                    html += '  </div>';
+                    html += '  <div id="details-' + alertId + '" class="dropdown-content">';
+                    html += '    <h5 class="font-medium text-gray-800 mb-3 flex items-center">';
+                    html += '      <i class="fas fa-info-circle text-blue-500 mr-2"></i>Alert Details';
+                    html += '    </h5>';
+                    html += '    <p class="text-sm text-gray-600 mb-3">' + alert.description + '</p>';
+                    html += '    <div class="bg-gray-50 p-4 rounded-lg">';
+                    html += '      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">';
+                    html += '        <div><strong class="text-gray-700">Trigger:</strong><br><span class="text-gray-600">' + alert.trigger + '</span></div>';
+                    html += '        <div><strong class="text-gray-700">Severity:</strong><br><span class="' + severityClass.text + '">' + alert.severity + '</span></div>';
+                    html += '        <div><strong class="text-gray-700">Source:</strong><br><span class="text-gray-600">' + alert.source + '</span></div>';
+                    html += '        <div><strong class="text-gray-700">Impact:</strong><br><span class="text-gray-600">' + (alert.impact || 'Under evaluation') + '</span></div>';
+                    html += '      </div>';
+                    html += '      <div class="mt-3 pt-3 border-t border-gray-200">';
+                    html += '        <strong class="text-gray-700">Recommended Action:</strong>';
+                    html += '        <p class="text-gray-600 mt-1">' + alert.recommended_action + '</p>';
+                    html += '      </div>';
+                    html += '    </div>';
+                    html += '  </div>';
+                    html += '</div>';
+                }
+            }
+            
+            document.getElementById('recentAlerts').innerHTML = html;
+        }
+        
+        function displayScoreChanges(changes) {
+            monitoringData.scoreChanges = changes;
+            var html = '';
+            
+            if (changes.length === 0) {
+                html = '<div class="text-center py-8 text-gray-500 bg-blue-50 rounded-lg border border-blue-200">';
+                html += '  <i class="fas fa-chart-line text-4xl mb-3 text-blue-400"></i>';
+                html += '  <p class="font-medium text-blue-700">No recent score changes</p>';
+                html += '  <p class="text-sm mt-1 text-blue-600">Risk scores are stable</p>';
+                html += '</div>';
+            } else {
+                for (var i = 0; i < changes.length; i++) {
+                    var change = changes[i];
+                    var changeId = 'score' + i;
+                    var timeAgo = getTimeAgo(change.timestamp);
+                    var changeAmount = change.new_score - change.old_score;
+                    var changeDirection = changeAmount > 0 ? '↑' : '↓';
+                    var changePercent = Math.abs((changeAmount / change.old_score) * 100).toFixed(1);
+                    var changeClass = getChangeColorClass(changeAmount);
+                    
+                    html += '<div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg clickable-row mb-3" onclick="toggleAlertDetails(\'' + changeId + '\')">';
+                    html += '  <div class="flex items-center justify-between">';
+                    html += '    <div class="flex-1">';
+                    html += '      <div class="flex items-center mb-1">';
+                    html += '        <i class="fas fa-exchange-alt text-yellow-600 mr-2"></i>';
+                    html += '        <div class="font-medium text-yellow-800">Score Change - ' + change.vendor_name + '</div>';
+                    html += '      </div>';
+                    html += '      <div class="text-sm text-yellow-600">';
+                    html += '        Score changed from <strong>' + change.old_score + '</strong> to <strong class="' + changeClass + '">' + change.new_score + '</strong> ';
+                    html += '        <span class="' + changeClass + '">(' + changeDirection + Math.abs(changeAmount) + ' points)</span>';
+                    html += '      </div>';
+                    html += '    </div>';
+                    html += '    <div class="text-xs text-yellow-500 text-right">';
+                    html += '      <div>' + timeAgo + '</div>';
+                    html += '      <div class="mt-1"><i class="fas fa-chevron-down"></i></div>';
+                    html += '    </div>';
+                    html += '  </div>';
+                    html += '  <div id="details-' + changeId + '" class="dropdown-content">';
+                    html += '    <h5 class="font-medium text-gray-800 mb-3 flex items-center">';
+                    html += '      <i class="fas fa-chart-line text-yellow-500 mr-2"></i>Score Change Analysis';
+                    html += '    </h5>';
+                    html += '    <p class="text-sm text-gray-600 mb-3">' + change.description + '</p>';
+                    html += '    <div class="bg-gray-50 p-4 rounded-lg">';
+                    html += '      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">';
+                    html += '        <div><strong class="text-gray-700">Previous Score:</strong><br><span class="text-lg font-medium">' + change.old_score + '/100</span></div>';
+                    html += '        <div><strong class="text-gray-700">New Score:</strong><br><span class="text-lg font-medium ' + changeClass + '">' + change.new_score + '/100</span></div>';
+                    html += '        <div><strong class="text-gray-700">Change:</strong><br><span class="font-medium ' + changeClass + '">' + changeDirection + Math.abs(changeAmount) + ' points</span></div>';
+                    html += '        <div><strong class="text-gray-700">Impact Level:</strong><br><span class="text-gray-600">' + (change.impact_level || 'Moderate') + '</span></div>';
+                    html += '      </div>';
+                    if (change.factors && change.factors.length > 0) {
+                        html += '      <div class="pt-3 border-t border-gray-200">';
+                        html += '        <strong class="text-gray-700">Contributing Factors:</strong>';
+                        html += '        <ul class="list-disc list-inside text-sm mt-2 space-y-1 text-gray-600">';
+                        for (var j = 0; j < change.factors.length; j++) {
+                            html += '          <li>' + change.factors[j] + '</li>';
+                        }
+                        html += '        </ul>';
+                        html += '      </div>';
+                    }
+                    html += '    </div>';
+                    html += '  </div>';
+                    html += '</div>';
+                }
+            }
+            
+            document.getElementById('scoreChanges').innerHTML = html;
+        }
+        
+        // Demo data functions
+        function loadDemoVendors() {
+            var demoVendors = [
+                {
+                    name: 'Slack Technologies',
+                    domain: 'slack.com',
+                    current_score: 72,
+                    status: 'active',
+                    last_check: new Date(Date.now() - 2 * 60000)
+                },
+                {
+                    name: 'Zoom Video Communications', 
+                    domain: 'zoom.us',
+                    current_score: 89,
+                    status: 'active',
+                    last_check: new Date(Date.now() - 1 * 60000)
+                },
+                {
+                    name: 'Microsoft Corporation',
+                    domain: 'microsoft.com', 
+                    current_score: 94,
+                    status: 'active',
+                    last_check: new Date(Date.now() - 5 * 60000)
+                }
+            ];
+            displayVendors(demoVendors);
+        }
+        
+        function loadDemoAlerts() {
+            var demoAlerts = [
+                {
+                    title: 'Security Alert - Slack Technologies',
+                    summary: 'New security incident reported in trust center',
+                    description: 'A new security incident was discovered during automated monitoring. The AI detected mentions of a potential data breach in recent security advisories published on their trust center.',
+                    trigger: 'Keyword match on "security incident" in trust center updates',
+                    severity: 'High',
+                    source: 'Trust center monitoring', 
+                    impact: 'Potential data exposure risk',
+                    recommended_action: 'Review security documentation, assess impact on your organization, and consider reaching out to vendor for clarification on incident scope and remediation steps.',
+                    timestamp: new Date(Date.now() - 5 * 60000)
+                },
+                {
+                    title: 'Compliance Update - Microsoft Corporation',
+                    summary: 'SOC 2 Type II certification renewed',
+                    description: 'Microsoft has successfully renewed their SOC 2 Type II certification with no identified control deficiencies.',
+                    trigger: 'Compliance certification monitoring',
+                    severity: 'Info',
+                    source: 'Compliance tracking',
+                    impact: 'Positive compliance standing',
+                    recommended_action: 'Update vendor compliance records and acknowledge improved security posture.',
+                    timestamp: new Date(Date.now() - 15 * 60000)
+                }
+            ];
+            displayAlerts(demoAlerts);
+        }
+        
+        function loadDemoScoreChanges() {
+            var demoChanges = [
+                {
+                    vendor_name: 'Slack Technologies',
+                    old_score: 78,
+                    new_score: 72,
+                    description: 'Risk score decreased by 6 points due to newly discovered security concerns and delayed incident response communications.',
+                    impact_level: 'Moderate',
+                    factors: [
+                        'Security incident discovery (-4 points)',
+                        'Trust center communication delays (-2 points)'
+                    ],
+                    timestamp: new Date(Date.now() - 10 * 60000)
+                },
+                {
+                    vendor_name: 'Microsoft Corporation',
+                    old_score: 91,
+                    new_score: 94,
+                    description: 'Risk score improved by 3 points following successful SOC 2 Type II renewal and enhanced security documentation.',
+                    impact_level: 'Low',
+                    factors: [
+                        'SOC 2 Type II certification renewal (+2 points)',
+                        'Enhanced security documentation (+1 point)'
+                    ],
+                    timestamp: new Date(Date.now() - 20 * 60000)
+                }
+            ];
+            displayScoreChanges(demoChanges);
+        }
+        
+        // Update statistics
+        function updateStats() {
+            var vendorCount = monitoringData.vendors.length;
+            var alertCount = monitoringData.alerts.length;
+            var changeCount = monitoringData.scoreChanges.length;
+            
+            var totalScore = 0;
+            for (var i = 0; i < monitoringData.vendors.length; i++) {
+                if (monitoringData.vendors[i].current_score) {
+                    totalScore += monitoringData.vendors[i].current_score;
+                }
+            }
+            var avgScore = vendorCount > 0 ? Math.round(totalScore / vendorCount) : 0;
+            
+            document.getElementById('statsVendors').textContent = vendorCount;
+            document.getElementById('statsAlerts').textContent = alertCount;
+            document.getElementById('statsScoreChanges').textContent = changeCount;
+            document.getElementById('statsAvgScore').textContent = avgScore > 0 ? avgScore : 'N/A';
+        }
+        
+        function updateLastUpdateTime() {
+            var now = new Date();
+            var timeString = now.toLocaleTimeString();
+            document.getElementById('lastUpdate').textContent = 'Last updated: ' + timeString;
+        }
+        
+        // Utility functions
+        function getScoreColorClass(score) {
+            if (!score) return 'text-gray-500';
+            if (score >= 85) return 'text-green-600';
+            if (score >= 70) return 'text-yellow-600'; 
+            return 'text-red-600';
+        }
+        
+        function getChangeColorClass(changeAmount) {
+            if (changeAmount > 0) return 'text-green-600';
+            if (changeAmount < 0) return 'text-red-600';
+            return 'text-gray-600';
+        }
+        
+        function getSeverityClass(severity) {
+            switch (severity.toLowerCase()) {
+                case 'high':
+                    return {
+                        bg: 'bg-red-50',
+                        border: 'border-red-200',
+                        text: 'text-red-800',
+                        subtext: 'text-red-600',
+                        time: 'text-red-500'
+                    };
+                case 'medium':
+                    return {
+                        bg: 'bg-yellow-50',
+                        border: 'border-yellow-200', 
+                        text: 'text-yellow-800',
+                        subtext: 'text-yellow-600',
+                        time: 'text-yellow-500'
+                    };
+                case 'info':
+                    return {
+                        bg: 'bg-blue-50',
+                        border: 'border-blue-200',
+                        text: 'text-blue-800',
+                        subtext: 'text-blue-600', 
+                        time: 'text-blue-500'
+                    };
+                default:
+                    return {
+                        bg: 'bg-gray-50',
+                        border: 'border-gray-200',
+                        text: 'text-gray-800',
+                        subtext: 'text-gray-600',
+                        time: 'text-gray-500'
+                    };
+            }
+        }
+        
+        function getSeverityIcon(severity) {
+            switch (severity.toLowerCase()) {
+                case 'high': return 'fas fa-exclamation-triangle text-red-500';
+                case 'medium': return 'fas fa-exclamation-circle text-yellow-500';
+                case 'info': return 'fas fa-info-circle text-blue-500';
+                default: return 'fas fa-circle text-gray-400';
+            }
+        }
+        
+        function getStatusIcon(status) {
+            switch (status) {
+                case 'active':
+                    return { class: 'status-online', text: 'Active' };
+                case 'checking':
+                    return { class: 'status-checking', text: 'Checking' };
+                case 'error':
+                    return { class: 'status-error', text: 'Error' };
+                default:
+                    return { class: 'status-online', text: 'Online' };
+            }
+        }
+        
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return 'Unknown';
+            var now = new Date();
+            var time = new Date(timestamp);
+            var diffMs = now - time;
+            var diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return diffMins + ' min ago';
+            var diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return diffHours + ' hr ago';
+            var diffDays = Math.floor(diffHours / 24);
+            return diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
+        }
+        
+        // Make functions globally available
+        window.toggleAlertDetails = toggleAlertDetails;
+        window.getVendorLogo = getVendorLogo;
+        window.handleLogoError = handleLogoError;
+        window.refreshData = refreshData;
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📋 Enhanced monitoring dashboard ready');
+            updateLastUpdateTime();
+            loadMonitoringData();
+            
+            // Auto-refresh every 5 minutes
+            setInterval(function() {
+                console.log('🔄 Auto-refreshing monitoring data...');
+                loadMonitoringData();
+            }, 5 * 60 * 1000);
+        });
+        
+    </script>
+</body>
+</html>

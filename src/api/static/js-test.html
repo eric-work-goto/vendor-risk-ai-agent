@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Test</title>
+</head>
+<body>
+    <h1>JavaScript Test Page</h1>
+    
+    <button onclick="testAlert()">Test Alert</button>
+    <button onclick="testConsole()">Test Console</button>
+    <button onclick="testDOM()">Test DOM</button>
+    
+    <div id="output"></div>
+    
+    <script>
+        console.log('Script is loading...');
+        
+        function testAlert() {
+            alert('Alert works!');
+        }
+        
+        function testConsole() {
+            console.log('Console logging works!');
+        }
+        
+        function testDOM() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p style="color: green;">DOM manipulation works! Time: ' + new Date().toLocaleTimeString() + '</p>';
+        }
+        
+        // Test on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM is ready!');
+            testDOM();
+        });
+        
+        console.log('Script loaded successfully');
+    </script>
+</body>
+</html>

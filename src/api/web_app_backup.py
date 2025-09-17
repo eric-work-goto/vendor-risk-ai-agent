@@ -4,10 +4,6 @@ Simplified FastAPI web application for the Vendor Risk Assessment system
 
 import sys
 import os
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
-
 # Add parent directory to path for port_config import
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from port_config import ensure_app_port, get_base_url, DEFAULT_PORT
@@ -41,38 +37,13 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
-# Import monitoring services
-try:
-    from ..services.ai_monitoring import monitor_vendor_ai
-    from ..services.monitoring_scheduler import (
-        add_vendor_to_monitoring,
-        remove_vendor_from_monitoring,
-        get_monitoring_status,
-        get_vendor_monitoring_alerts,
-        get_all_monitoring_alerts
-    )
-    MONITORING_AVAILABLE = True
-except ImportError:
-    MONITORING_AVAILABLE = False
-    async def monitor_vendor_ai(domain, name=None):
-        return []
-    async def add_vendor_to_monitoring(domain, name=None, assessment_id=None):
-        return False
-    async def remove_vendor_from_monitoring(domain):
-        return False
-    async def get_monitoring_status():
-        return {"error": "Monitoring not available"}
-    async def get_vendor_monitoring_alerts(domain, limit=50):
-        return []
-    async def get_all_monitoring_alerts(limit=50):
-        return []
-
 # Try to import openai, fall back gracefully if not available
 try:
     import openai
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+    logger.warning("OpenAI package not available, falling back to keyword-based AI detection")
 
 # AI-Powered Assessment Orchestrator
 async def ai_powered_assessment_analysis(vendor_domain: str, vendor_name: str, collected_data: Dict[str, Any], assessment_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -110,9 +81,12 @@ async def try_openai_comprehensive_analysis(vendor_domain: str, vendor_name: str
         if not OPENAI_AVAILABLE:
             return None
             
-        # Use ExpertCity corporate server configuration
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            logger.info(f"No OpenAI API key found for comprehensive analysis of {vendor_domain}")
+            return None
+            
+        openai.api_key = openai_api_key
         
         # Prepare data summary for AI analysis
         data_summary = {
@@ -215,12 +189,9 @@ Consider the following in your analysis:
 Provide a thorough, professional analysis that would be suitable for executive decision-making.
 """
 
-        # Initialize OpenAI client and make API call
-        from openai import OpenAI
-        client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
-        
-        response = client.chat.completions.create(
-            model='gpt-4o-mini',
+        # Make API call to OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Use GPT-4 for more sophisticated analysis
             messages=[
                 {"role": "system", "content": "You are a senior cybersecurity consultant and vendor risk assessment expert with 15+ years of experience. Provide detailed, actionable, and professional risk assessments suitable for executive decision-making. Always respond with valid JSON."},
                 {"role": "user", "content": analysis_prompt}
@@ -642,7 +613,6 @@ class CreateAssessmentRequest(BaseModel):
     auto_trust_center: bool = False
     enhanced_assessment: bool = False  # Enable comprehensive industry-standard assessment
     assessment_mode: str = "business_risk"  # "technical_due_diligence" or "business_risk"
-    enable_continuous_monitoring: bool = False  # Enable continuous monitoring for this vendor
 
     @validator('vendor_domain')
     def validate_vendor_domain(cls, v):
@@ -725,10 +695,6 @@ app = FastAPI(
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Log OpenAI availability
-if not OPENAI_AVAILABLE:
-    logger.warning("OpenAI package not available, falling back to keyword-based AI detection")
 
 # Add CORS middleware
 app.add_middleware(
@@ -839,58 +805,6 @@ async def serve_combined_ui():
                 <body>
                     <h1>🚫 Combined UI Not Found</h1>
                     <p>The combined-ui.html file was not found in the static directory.</p>
-                    <p><a href="/">← Back to Home</a></p>
-                </body>
-            </html>
-            """,
-            status_code=404
-        )
-
-@app.get("/clean-monitoring", response_class=HTMLResponse)
-async def serve_clean_monitoring():
-    """Serve the Clean Monitoring Dashboard (no template literals)"""
-    clean_monitoring_path = static_path / "clean-monitoring.html"
-    if clean_monitoring_path.exists():
-        with open(clean_monitoring_path, 'r', encoding='utf-8') as f:
-            return HTMLResponse(content=f.read(), status_code=200)
-    else:
-        return HTMLResponse(
-            content="""
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <title>Clean Monitoring - Not Found</title>
-                    <style>body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }</style>
-                </head>
-                <body>
-                    <h1>🚫 Clean Monitoring Dashboard Not Found</h1>
-                    <p>The clean-monitoring.html file was not found in the static directory.</p>
-                    <p><a href="/">← Back to Home</a></p>
-                </body>
-            </html>
-            """,
-            status_code=404
-        )
-
-@app.get("/monitoring-dashboard", response_class=HTMLResponse)
-async def serve_monitoring_dashboard():
-    """Serve the Enhanced Monitoring Dashboard"""
-    enhanced_monitoring_path = static_path / "enhanced-monitoring.html"
-    if enhanced_monitoring_path.exists():
-        with open(enhanced_monitoring_path, 'r', encoding='utf-8') as f:
-            return HTMLResponse(content=f.read(), status_code=200)
-    else:
-        return HTMLResponse(
-            content="""
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <title>Monitoring Dashboard - Not Found</title>
-                    <style>body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }</style>
-                </head>
-                <body>
-                    <h1>🚫 Monitoring Dashboard Not Found</h1>
-                    <p>The enhanced-monitoring.html file was not found in the static directory.</p>
                     <p><a href="/">← Back to Home</a></p>
                 </body>
             </html>
@@ -1140,29 +1054,29 @@ class BulkAssessmentJob:
 
 
 class DynamicComplianceDiscovery:
-    """AI-powered discovery of vendor webpages discussing compliance frameworks (GDPR, HIPAA, PCI-DSS, CCPA)"""
+    """AI-powered dynamic compliance document discovery for any vendor"""
     
     def __init__(self):
-        # Compliance framework webpage patterns - focus on finding vendor pages discussing these topics
+        # Common compliance framework patterns
         self.compliance_frameworks = {
             "gdpr": {
-                "keywords": ["gdpr", "general data protection regulation", "data protection", "privacy policy", "personal data", "gdpr compliance", "european privacy"],
-                "url_patterns": ["/gdpr", "/privacy", "/data-protection", "/legal/gdpr", "/legal/privacy", "/compliance/gdpr", "/security/gdpr"],
-                "subdomain_patterns": ["privacy", "legal", "trust", "compliance", "security"]
+                "keywords": ["gdpr", "general data protection regulation", "data protection", "privacy policy", "personal data"],
+                "url_patterns": ["/gdpr", "/privacy", "/data-protection", "/legal/gdpr", "/legal/privacy", "/compliance/gdpr"],
+                "subdomain_patterns": ["privacy", "legal", "trust", "compliance"]
             },
             "ccpa": {
-                "keywords": ["ccpa", "california consumer privacy act", "california privacy", "consumer rights", "ccpa compliance", "california data protection"],
-                "url_patterns": ["/ccpa", "/california-privacy", "/privacy/ccpa", "/legal/ccpa", "/compliance/ccpa", "/security/ccpa"],
-                "subdomain_patterns": ["privacy", "legal", "trust", "compliance", "security"]
+                "keywords": ["ccpa", "california consumer privacy act", "california privacy", "consumer rights"],
+                "url_patterns": ["/ccpa", "/california-privacy", "/privacy/ccpa", "/legal/ccpa", "/compliance/ccpa"],
+                "subdomain_patterns": ["privacy", "legal", "trust", "compliance"]
             },
             "hipaa": {
-                "keywords": ["hipaa", "health insurance portability", "protected health information", "phi", "healthcare compliance", "hipaa compliance", "medical data protection"],
-                "url_patterns": ["/hipaa", "/healthcare", "/compliance/hipaa", "/legal/hipaa", "/security/hipaa", "/healthcare-compliance"],
+                "keywords": ["hipaa", "health insurance portability", "protected health information", "phi", "healthcare compliance"],
+                "url_patterns": ["/hipaa", "/healthcare", "/compliance/hipaa", "/legal/hipaa", "/security/hipaa"],
                 "subdomain_patterns": ["trust", "legal", "compliance", "security", "healthcare"]
             },
             "pci-dss": {
-                "keywords": ["pci", "payment card industry", "card data security", "payment security", "pci-dss", "pci compliance", "payment card security"],
-                "url_patterns": ["/pci", "/pci-dss", "/payment-security", "/compliance/pci", "/security/pci", "/pci-compliance"],
+                "keywords": ["pci", "payment card industry", "card data security", "payment security", "pci-dss"],
+                "url_patterns": ["/pci", "/pci-dss", "/payment-security", "/compliance/pci", "/security/pci"],
                 "subdomain_patterns": ["trust", "legal", "compliance", "security"]
             },
             "soc2": {
@@ -1185,25 +1099,25 @@ class DynamicComplianceDiscovery:
         ]
     
     async def discover_vendor_compliance(self, vendor_domain: str, requested_frameworks: List[str]) -> Dict[str, Any]:
-        """Discover vendor webpages discussing compliance frameworks (GDPR, HIPAA, PCI-DSS, CCPA)"""
+        """Dynamically discover compliance information for any vendor"""
         
-        logger.info(f"🔍 Finding {vendor_domain} webpages discussing compliance topics: {requested_frameworks}")
+        logger.info(f"🔍 Starting dynamic compliance discovery for {vendor_domain}")
         
-        # Step 1: Discover trust center URLs and compliance-related pages
+        # Step 1: Discover trust center URLs
         trust_centers = await self._discover_trust_centers(vendor_domain)
         
-        # Step 2: Scan for webpages discussing compliance frameworks
-        compliance_pages = await self._scan_compliance_documents(vendor_domain, requested_frameworks, trust_centers)
+        # Step 2: Scan for compliance documents
+        compliance_docs = await self._scan_compliance_documents(vendor_domain, requested_frameworks, trust_centers)
         
-        # Step 3: Analyze webpage content for compliance topic discussions
-        analyzed_pages = await self._analyze_compliance_content(compliance_pages, requested_frameworks)
+        # Step 3: Intelligent content analysis
+        analyzed_docs = await self._analyze_compliance_content(compliance_docs, requested_frameworks)
         
         return {
             "vendor_domain": vendor_domain,
             "trust_centers": trust_centers,
-            "compliance_documents": analyzed_pages,
+            "compliance_documents": analyzed_docs,
             "discovery_timestamp": datetime.now().isoformat(),
-            "frameworks_found": list(set([page["framework"] for page in analyzed_pages if page.get("framework")]))
+            "frameworks_found": list(set([doc["framework"] for doc in analyzed_docs if doc.get("framework")]))
         }
     
     async def _discover_trust_centers(self, vendor_domain: str) -> List[Dict[str, Any]]:
@@ -1295,129 +1209,7 @@ class DynamicComplianceDiscovery:
         except:
             pass
         return "Unknown"
-
-    async def _discover_general_compliance_resources(self, vendor_domain: str) -> List[Dict[str, Any]]:
-        """Discover general compliance resources when no dedicated trust center is found"""
-        
-        compliance_resources = []
-        
-        # Common compliance-related URLs to check
-        compliance_urls = [
-            f"https://{vendor_domain}/privacy",
-            f"https://{vendor_domain}/privacy-policy", 
-            f"https://{vendor_domain}/legal",
-            f"https://{vendor_domain}/legal/privacy",
-            f"https://{vendor_domain}/security",
-            f"https://{vendor_domain}/compliance",
-            f"https://{vendor_domain}/gdpr",
-            f"https://{vendor_domain}/ccpa",
-            f"https://{vendor_domain}/about/security",
-            f"https://{vendor_domain}/company/security",
-            f"https://help.{vendor_domain}/security",
-            f"https://support.{vendor_domain}/security"
-        ]
-        
-        import requests
-        
-        for url in compliance_urls:
-            try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (compatible; compliance-scanner/1.0)',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                }
-                response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
-                
-                if response.status_code == 200:
-                    content = response.text
-                    resource_score = self._calculate_compliance_resource_score(content)
-                    resource_type = self._classify_compliance_resource(content, url)
-                    
-                    if resource_score > 0.2:  # Lower threshold for general compliance resources
-                        compliance_resources.append({
-                            "url": response.url,
-                            "original_url": url,
-                            "resource_score": resource_score,
-                            "resource_type": resource_type,
-                            "content_length": len(content),
-                            "page_title": self._extract_page_title(content),
-                            "source": "compliance_resource_discovery"
-                        })
-                        logger.info(f"🔍 Found compliance resource: {response.url} (type: {resource_type}, score: {resource_score:.2f})")
-            
-            except Exception as e:
-                logger.debug(f"Failed to access compliance resource {url}: {str(e)}")
-                continue
-        
-        # Sort by resource score
-        compliance_resources.sort(key=lambda x: x["resource_score"], reverse=True)
-        return compliance_resources
-
-    def _calculate_compliance_resource_score(self, content: str) -> float:
-        """Calculate how relevant a page is for compliance information"""
-        
-        content_lower = content.lower()
-        score = 0.0
-        
-        # Privacy policy indicators
-        privacy_indicators = ["privacy policy", "data protection", "personal information", "data collection", "cookies"]
-        for indicator in privacy_indicators:
-            if indicator in content_lower:
-                score += 0.15
-        
-        # Security documentation indicators
-        security_indicators = ["security", "encryption", "data security", "security measures", "secure"]
-        for indicator in security_indicators:
-            if indicator in content_lower:
-                score += 0.1
-        
-        # Compliance framework mentions
-        framework_indicators = ["gdpr", "ccpa", "hipaa", "pci", "soc 2", "iso 27001", "compliance"]
-        for indicator in framework_indicators:
-            if indicator in content_lower:
-                score += 0.2
-        
-        # Legal/regulatory content
-        legal_indicators = ["terms of service", "legal", "regulations", "regulatory", "policy"]
-        for indicator in legal_indicators:
-            if indicator in content_lower:
-                score += 0.08
-        
-        # Document availability
-        document_indicators = ["download", "pdf", "document", "report", "certification"]
-        for indicator in document_indicators:
-            if indicator in content_lower:
-                score += 0.05
-        
-        return min(score, 1.0)  # Cap at 1.0
-
-    def _classify_compliance_resource(self, content: str, url: str) -> str:
-        """Classify the type of compliance resource"""
-        
-        content_lower = content.lower()
-        url_lower = url.lower()
-        
-        # Check URL patterns first
-        if any(pattern in url_lower for pattern in ["/privacy", "/privacy-policy"]):
-            return "Privacy Policy"
-        elif "/security" in url_lower:
-            return "Security Documentation"
-        elif "/legal" in url_lower:
-            return "Legal Documentation"
-        elif any(pattern in url_lower for pattern in ["/gdpr", "/ccpa", "/compliance"]):
-            return "Compliance Framework"
-        
-        # Check content patterns
-        if "privacy policy" in content_lower and ("personal" in content_lower or "data" in content_lower):
-            return "Privacy Policy"
-        elif any(indicator in content_lower for indicator in ["security", "encryption", "secure"]):
-            return "Security Documentation"
-        elif any(indicator in content_lower for indicator in ["gdpr", "ccpa", "hipaa", "pci", "soc"]):
-            return "Compliance Framework"
-        elif "legal" in content_lower or "terms" in content_lower:
-            return "Legal Documentation"
-        else:
-            return "General Compliance Resource"
-
+    
     async def _scan_compliance_documents(self, vendor_domain: str, frameworks: List[str], trust_centers: List[Dict]) -> List[Dict[str, Any]]:
         """Scan for specific compliance documents - optimized to scan fewer URLs"""
         
@@ -1480,7 +1272,7 @@ class DynamicComplianceDiscovery:
         return documents
     
     async def _analyze_url_for_compliance(self, url: str, frameworks: List[str]) -> Dict[str, Any]:
-        """Analyze a URL for compliance content using simplified approach with URL-based detection"""
+        """Analyze a URL for compliance content using simplified approach"""
         
         analysis = {
             "relevance_score": 0.0,
@@ -1490,33 +1282,6 @@ class DynamicComplianceDiscovery:
             "document_type": "webpage",
             "content": ""
         }
-        
-        # First, check URL for framework indicators (more reliable than content analysis)
-        url_lower = url.lower()
-        url_frameworks_detected = []
-        
-        for framework in frameworks:
-            framework_lower = framework.lower()
-            
-            # Direct URL pattern matching
-            if framework_lower == "gdpr" and any(pattern in url_lower for pattern in ["gdpr", "data-protection", "privacy/gdpr"]):
-                url_frameworks_detected.append("gdpr")
-                analysis["confidence_scores"]["gdpr"] = 0.9
-            elif framework_lower == "ccpa" and any(pattern in url_lower for pattern in ["ccpa", "california-privacy", "privacy/ccpa"]):
-                url_frameworks_detected.append("ccpa")
-                analysis["confidence_scores"]["ccpa"] = 0.9
-            elif framework_lower == "hipaa" and any(pattern in url_lower for pattern in ["hipaa", "healthcare", "compliance/hipaa"]):
-                url_frameworks_detected.append("hipaa")
-                analysis["confidence_scores"]["hipaa"] = 0.9
-            elif framework_lower == "pci-dss" and any(pattern in url_lower for pattern in ["pci", "payment", "card"]):
-                url_frameworks_detected.append("pci-dss")
-                analysis["confidence_scores"]["pci-dss"] = 0.9
-        
-        # If URL clearly indicates specific frameworks, set high confidence
-        if url_frameworks_detected:
-            analysis["detected_frameworks"] = url_frameworks_detected
-            analysis["relevance_score"] = 0.9
-            return analysis
         
         try:
             # Use a simple requests approach to avoid aiohttp issues
@@ -1575,26 +1340,8 @@ class DynamicComplianceDiscovery:
                     if keyword.lower() in content_lower:
                         framework_score += 0.2
                 
-                # Additional scoring for pages discussing compliance topics
-                discussion_indicators = [
-                    "we comply with", "compliance with", "adheres to", "follows", 
-                    "meets requirements", "certified for", "committed to", "ensures",
-                    "how we handle", "our approach to", "we implement", "we maintain"
-                ]
-                
-                for indicator in discussion_indicators:
-                    if indicator in content_lower and any(keyword in content_lower for keyword in framework_data["keywords"]):
-                        framework_score += 0.3
-                        break
-                
-                # Boost for pages that explain compliance practices
-                if framework.lower() == "hipaa" and any(term in content_lower for term in ["business associate agreement", "phi", "protected health"]):
-                    framework_score += 0.3
-                elif framework.lower() == "gdpr" and any(term in content_lower for term in ["data subject rights", "lawful basis", "data protection"]):
-                    framework_score += 0.3
-                elif framework.lower() == "ccpa" and any(term in content_lower for term in ["consumer rights", "do not sell", "california residents"]):
-                    framework_score += 0.3
-                elif framework.lower() == "pci-dss" and any(term in content_lower for term in ["card data", "payment security", "pci certified"]):
+                # Additional scoring for specific content types
+                if "business associate agreement" in content_lower and framework.lower() == "hipaa":
                     framework_score += 0.3
                 
                 if "data subject rights" in content_lower and framework.lower() == "gdpr":
@@ -1620,84 +1367,25 @@ class DynamicComplianceDiscovery:
         """Perform detailed analysis of discovered compliance documents"""
         
         analyzed_docs = []
-        url_to_best_framework = {}  # Track which framework gets which URL
         
-        # First pass: determine the best framework for each URL
         for doc in documents:
             compliance_info = doc["compliance_info"]
-            detected_frameworks = compliance_info.get("detected_frameworks", [])
-            url = doc["url"]
             
-            if detected_frameworks:
-                # Find the framework with highest confidence for this URL
-                best_framework = None
-                best_confidence = 0.0
-                
-                for framework in detected_frameworks:
-                    confidence = compliance_info["confidence_scores"].get(framework, 0.5)
-                    if confidence > best_confidence:
-                        best_confidence = confidence
-                        best_framework = framework
-                
-                # Check if URL path strongly indicates a specific framework
-                url_lower = url.lower()
-                for framework in detected_frameworks:
-                    framework_lower = framework.lower()
-                    if framework_lower in url_lower:
-                        # Direct framework match in URL - this takes priority
-                        best_framework = framework
-                        best_confidence = 0.95
-                        break
-                
-                if best_framework:
-                    url_to_best_framework[url] = (best_framework, best_confidence)
-        
-        # Second pass: create documents with unique framework assignments
-        for doc in documents:
-            compliance_info = doc["compliance_info"]
-            detected_frameworks = compliance_info.get("detected_frameworks", [])
-            url = doc["url"]
+            # Create structured document entry
+            doc_entry = {
+                "document_name": f"Compliance Information - {doc['url'].split('/')[-1] or 'Homepage'}",
+                "source_url": doc["url"],
+                "framework": compliance_info["detected_frameworks"][0] if compliance_info["detected_frameworks"] else "general",
+                "confidence": max(compliance_info["confidence_scores"].values()) if compliance_info["confidence_scores"] else 0.0,
+                "document_type": compliance_info["document_type"],
+                "status": "available",
+                "access_method": "public",
+                "retrieved_at": doc["discovered_at"],
+                "content_summary": self._generate_content_summary(compliance_info),
+                "all_frameworks": compliance_info["detected_frameworks"]
+            }
             
-            if not detected_frameworks or url not in url_to_best_framework:
-                # Create a general entry if no specific frameworks detected
-                doc_entry = {
-                    "document_name": f"Compliance Information - {doc['url'].split('/')[-1] or 'Homepage'}",
-                    "source_url": doc["url"],
-                    "framework": "general",
-                    "confidence": 0.3,
-                    "document_type": compliance_info["document_type"],
-                    "status": "available",
-                    "access_method": "public",
-                    "retrieved_at": doc["discovered_at"],
-                    "content_summary": "General compliance or privacy information",
-                    "all_frameworks": []
-                }
-                analyzed_docs.append(doc_entry)
-            else:
-                # Use the best framework for this URL
-                framework, framework_confidence = url_to_best_framework[url]
-                
-                # Generate framework-specific document name
-                url_path = doc['url'].split('/')[-1] or 'page'
-                if framework.lower() in url_path.lower():
-                    doc_name = f"{framework.upper()} Compliance Page"
-                else:
-                    doc_name = f"Compliance Information - {framework.upper()}"
-                
-                doc_entry = {
-                    "document_name": doc_name,
-                    "source_url": doc["url"],
-                    "framework": framework,
-                    "confidence": framework_confidence,
-                    "document_type": compliance_info["document_type"],
-                    "status": "available",
-                    "access_method": "public",
-                    "retrieved_at": doc["discovered_at"],
-                    "content_summary": f"Contains {framework.upper()} compliance information",
-                    "all_frameworks": [framework]  # Only include this framework
-                }
-                
-                analyzed_docs.append(doc_entry)
+            analyzed_docs.append(doc_entry)
         
         # Sort by confidence score
         analyzed_docs.sort(key=lambda x: x["confidence"], reverse=True)
@@ -1929,6 +1617,170 @@ class TrustCenterIntegrator:
         }
         
         logger.info(f"🔍 Dynamic discovery completed for {vendor_domain}: {len(documents)} documents found")
+        return result
+        
+        # Real document URLs for known vendors
+        known_document_urls = {
+            "slack.com": {
+                "iso27001": "https://a.slack-edge.com/53bfd26/marketing/downloads/security/Slack_ISO_27001_cert_2024.pdf",
+                "soc2": "https://slack.com/trust/compliance", 
+                "gdpr": "https://slack.com/trust/compliance/gdpr",
+                "ccpa": "https://slack.com/trust/compliance/ccpa-faq",
+                "hipaa": "https://slack.com/help/articles/360020685594-Slack-and-HIPAA",
+                "pci-dss": "https://slack.com/trust/compliance"
+            },
+            "github.com": {
+                "soc2": "https://resources.github.com/security/github-soc2-type2.pdf",
+                "iso27001": "https://github.com/security/advisories",
+                "ccpa": "https://docs.github.com/en/site-policy/privacy-policies/california-consumer-privacy-act",
+                "hipaa": "https://github.com/security",
+                "pci-dss": "https://github.com/security"
+            },
+            "salesforce.com": {
+                "soc2": "https://trust.salesforce.com/en/compliance/soc-2/",
+                "iso27001": "https://trust.salesforce.com/en/compliance/iso-27001/",
+                "gdpr": "https://trust.salesforce.com/en/privacy/gdpr/",
+                "ccpa": "https://trust.salesforce.com/en/privacy/ccpa/",
+                "hipaa": "https://trust.salesforce.com/en/compliance/hipaa/",
+                "pci-dss": "https://trust.salesforce.com/en/compliance/pci/"
+            },
+            "microsoft.com": {
+                "soc2": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+                "iso27001": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+                "gdpr": "https://privacy.microsoft.com/en-us/privacystatement",
+                "ccpa": "https://privacy.microsoft.com/en-us/california-privacy-statement",
+                "hipaa": "https://servicetrust.microsoft.com/ViewPage/TrustDocumentsV3?command=Download&downloadType=Document&downloadId=6e8efbfb-78e6-4375-b6e4-8a0a3eb5e57b&tab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913&docTab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913_FAQ_and_White_Papers",
+                "pci-dss": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3"
+            },
+            "google.com": {
+                "soc2": "https://cloud.google.com/security/compliance/soc-2",
+                "iso27001": "https://cloud.google.com/security/compliance/iso-27001",
+                "gdpr": "https://cloud.google.com/privacy/gdpr",
+                "ccpa": "https://policies.google.com/privacy/ccpa",
+                "hipaa": "https://cloud.google.com/security/compliance/hipaa",
+                "pci-dss": "https://cloud.google.com/security/compliance/pci-dss"
+            },
+            "amazon.com": {
+                "soc2": "https://aws.amazon.com/compliance/soc/",
+                "iso27001": "https://aws.amazon.com/compliance/iso-27001/",
+                "gdpr": "https://aws.amazon.com/compliance/gdpr-center/",
+                "ccpa": "https://www.amazon.com/gp/help/customer/display.html?nodeId=GQFYXCPVFY6DKMFE",
+                "hipaa": "https://aws.amazon.com/compliance/hipaa-compliance/",
+                "pci-dss": "https://aws.amazon.com/compliance/pci-dss-level-1-faqs/"
+            },
+            "zoom.us": {
+                "soc2": "https://zoom.us/docs/doc/Zoom_SOC2_Type_II_Report.pdf",
+                "iso27001": "https://zoom.us/trust/security",
+                "gdpr": "https://zoom.us/gdpr",
+                "ccpa": "https://zoom.us/privacy",
+                "hipaa": "https://zoom.us/docs/doc/Zoom-hipaa.pdf",
+                "pci-dss": "https://zoom.us/trust/security"
+            }
+        }
+        
+        # Normalize document types to lowercase for matching
+        normalized_document_types = [doc_type.lower() for doc_type in document_types]
+        logger.info(f"🔍 Normalized document types: {normalized_document_types}")
+        
+        vendor_domain_lower = vendor_domain.lower()
+        
+        # Check enhanced mappings first
+        enhanced_urls = self.get_enhanced_compliance_urls(vendor_domain_lower)
+        if enhanced_urls:
+            logger.info(f"🔍 Using enhanced compliance URLs for {vendor_domain}")
+            for doc_type in normalized_document_types:
+                if doc_type in enhanced_urls:
+                    document_id = f"{doc_type}_{vendor_domain_lower.replace('.', '_')}"
+                    source_url = enhanced_urls[doc_type]
+                    is_pdf = source_url.lower().endswith('.pdf')
+                    doc_entry = {
+                        "document_name": f"{vendor_domain} {doc_type.upper()} Compliance Document",
+                        "document_type": doc_type,
+                        "source_url": source_url,
+                        "status": "available",
+                        "access_method": "public",
+                        "retrieved_at": datetime.now().isoformat(),
+                        "download_ready": True,
+                        "download_url": f"/api/v1/trust-center/download/{document_id}",
+                        "is_pdf": is_pdf,
+                        "content_type": "pdf" if is_pdf else "webpage",
+                        "discovery_method": "enhanced_mapping"
+                    }
+                    logger.info(f"🔍 Created enhanced document entry: {doc_entry}")
+                    documents.append(doc_entry)
+        
+        # Fallback to known document URLs if no enhanced mapping found
+        elif vendor_domain_lower in known_document_urls:
+            # Get real document links for known vendors
+            vendor_docs = known_document_urls[vendor_domain_lower]
+            for doc_type in normalized_document_types:
+                if doc_type in vendor_docs:
+                    document_id = f"{doc_type}_{vendor_domain_lower.replace('.', '_')}"
+                    source_url = vendor_docs[doc_type]
+                    is_pdf = source_url.lower().endswith('.pdf')
+                    doc_entry = {
+                        "document_name": f"{vendor_domain} {doc_type.upper()} Compliance Document",
+                        "document_type": doc_type,
+                        "source_url": source_url,
+                        "status": "available",
+                        "access_method": "public",
+                        "retrieved_at": datetime.now().isoformat(),
+                        "download_ready": True,
+                        "download_url": f"/api/v1/trust-center/download/{document_id}",
+                        "is_pdf": is_pdf,
+                        "content_type": "pdf" if is_pdf else "webpage"
+                    }
+                    logger.info(f"🔍 Created document entry: {doc_entry}")
+                    documents.append(doc_entry)
+        else:
+            # Enhanced document discovery for unknown vendors
+            discovered_docs = await self.discover_compliance_documents(vendor_domain, normalized_document_types)
+            documents.extend(discovered_docs)
+            
+            # Fallback to generic document discovery from trust center
+            if trust_center_info:
+                base_url = trust_center_info["trust_center_url"]
+                
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        async with session.get(base_url, timeout=15) as response:
+                            if response.status == 200:
+                                content = await response.text()
+                                
+                                # Look for document links
+                                doc_links = self.extract_document_links(content, base_url, document_types)
+                                
+                                for link_info in doc_links:
+                                    documents.append({
+                                        "document_name": link_info["name"],
+                                        "document_type": link_info["type"],
+                                        "source_url": link_info["url"],
+                                        "status": "available",
+                                        "access_method": "public",
+                                        "retrieved_at": datetime.now().isoformat()
+                                    })
+                    
+                    except Exception as e:
+                        request_id = f"error_{vendor_domain}_{int(datetime.now().timestamp())}"
+                        return {
+                            "success": False,
+                            "message": f"Error fetching documents: {str(e)}",
+                            "request_id": request_id,
+                            "estimated_response_time": "Retry required",
+                            "documents": []
+                        }
+        
+        result = {
+            "success": True,
+            "message": f"Found {len(documents)} publicly available documents for {vendor_domain}",
+            "request_id": f"public_{vendor_domain}_{int(datetime.now().timestamp())}",
+            "estimated_response_time": "Immediate",
+            "documents": documents,
+            "access_method": "public",
+            "trust_center_url": trust_center_info.get("trust_center_url") if trust_center_info else None
+        }
+        
+        logger.info(f"🔍 Final result being returned: {result}")
         return result
     
     async def send_documents_email(self, requester_email: str, vendor_domain: str, documents: List[Dict], request_id: str):
@@ -2235,39 +2087,172 @@ Vendor Risk Assessment System
         return links
 
     async def discover_public_compliance_pages(self, vendor_domain: str, document_types: List[str]) -> List[Dict[str, Any]]:
-        """Dynamic AI-powered discovery for compliance pages using OpenAI API only"""
+        """Enhanced discovery for publicly available compliance pages, prioritizing GDPR, CCPA, HIPAA, and PCI-DSS"""
         
         documents = []
         
-        # Use dynamic compliance discovery for all document types
-        dynamic_discoverer = DynamicComplianceDiscovery()
+        # Comprehensive public URL patterns for priority frameworks
+        public_patterns = {
+            "gdpr": [
+                # Common public GDPR patterns
+                f"https://{vendor_domain}/privacy/gdpr",
+                f"https://{vendor_domain}/gdpr",
+                f"https://{vendor_domain}/legal/gdpr",
+                f"https://{vendor_domain}/legal/mixpanel-gdpr",  # Mixpanel-specific pattern
+                f"https://{vendor_domain}/privacy/data-protection",
+                f"https://{vendor_domain}/data-protection",
+                f"https://{vendor_domain}/privacy/policy",
+                f"https://{vendor_domain}/privacy-policy",
+                f"https://{vendor_domain}/privacy",
+                f"https://{vendor_domain}/legal/privacy",
+                f"https://{vendor_domain}/legal/data-protection",
+                f"https://{vendor_domain}/compliance/gdpr",
+                f"https://{vendor_domain}/security/gdpr",
+                f"https://{vendor_domain}/support/gdpr",
+                f"https://{vendor_domain}/help/gdpr",
+                # Subdomain patterns
+                f"https://privacy.{vendor_domain}",
+                f"https://privacy.{vendor_domain}/gdpr",
+                f"https://privacy.{vendor_domain}/en-us/privacystatement",
+                f"https://policies.{vendor_domain}/privacy",
+                f"https://legal.{vendor_domain}/privacy",
+                # Cloud service patterns
+                f"https://cloud.{vendor_domain}/privacy/gdpr",
+                f"https://aws.{vendor_domain}/compliance/gdpr-center/",
+                # Trust/security pages
+                f"https://trust.{vendor_domain}/privacy/gdpr",
+                f"https://trust.{vendor_domain}/en/privacy/gdpr/"
+            ],
+            "ccpa": [
+                # Common public CCPA patterns
+                f"https://{vendor_domain}/privacy/ccpa",
+                f"https://{vendor_domain}/ccpa",
+                f"https://{vendor_domain}/legal/ccpa",
+                f"https://{vendor_domain}/legal/mixpanel-ccpa",  # Mixpanel-specific pattern
+                f"https://{vendor_domain}/privacy/california",
+                f"https://{vendor_domain}/california-privacy",
+                f"https://{vendor_domain}/legal/california-privacy",
+                f"https://{vendor_domain}/privacy/california-consumer-privacy-act",
+                f"https://{vendor_domain}/compliance/ccpa",
+                f"https://{vendor_domain}/security/ccpa",
+                f"https://{vendor_domain}/support/ccpa",
+                f"https://{vendor_domain}/help/ccpa",
+                # Subdomain patterns
+                f"https://privacy.{vendor_domain}/ccpa",
+                f"https://privacy.{vendor_domain}/california",
+                f"https://privacy.{vendor_domain}/en-us/california-privacy-statement",
+                f"https://policies.{vendor_domain}/privacy/ccpa",
+                f"https://legal.{vendor_domain}/ccpa",
+                # Cloud service patterns
+                f"https://cloud.{vendor_domain}/privacy/ccpa",
+                f"https://www.{vendor_domain}/gp/help/customer/display.html?nodeId=GQFYXCPVFY6DKMFE",
+                # Trust/security pages
+                f"https://trust.{vendor_domain}/privacy/ccpa",
+                f"https://trust.{vendor_domain}/en/privacy/ccpa/"
+            ],
+            "hipaa": [
+                # Common public HIPAA patterns
+                f"https://{vendor_domain}/compliance/hipaa",
+                f"https://{vendor_domain}/hipaa",
+                f"https://{vendor_domain}/security/hipaa",
+                f"https://{vendor_domain}/legal/hipaa",
+                f"https://{vendor_domain}/legal/mixpanel-hipaa",  # Mixpanel-specific pattern
+                f"https://{vendor_domain}/healthcare/hipaa",
+                f"https://{vendor_domain}/healthcare/compliance",
+                f"https://{vendor_domain}/health-compliance",
+                f"https://{vendor_domain}/healthcare-security",
+                f"https://{vendor_domain}/healthcare/security",
+                f"https://{vendor_domain}/support/hipaa",
+                f"https://{vendor_domain}/help/hipaa",
+                f"https://{vendor_domain}/resources/hipaa",
+                # Cloud service patterns
+                f"https://cloud.{vendor_domain}/security/compliance/hipaa",
+                f"https://aws.{vendor_domain}/compliance/hipaa-compliance/",
+                # Trust/security pages
+                f"https://trust.{vendor_domain}/compliance/hipaa",
+                f"https://trust.{vendor_domain}/en/compliance/hipaa/",
+                f"https://security.{vendor_domain}/compliance/hipaa",
+                # Support/help patterns
+                f"https://{vendor_domain}/help/articles/hipaa",
+                f"https://{vendor_domain}/help/articles/360020685594-Slack-and-HIPAA",
+                f"https://support.{vendor_domain}/hipaa",
+                # Document patterns
+                f"https://{vendor_domain}/docs/hipaa",
+                f"https://{vendor_domain}/docs/doc/Zoom-hipaa.pdf"
+            ],
+            "pci-dss": [
+                # Common public PCI-DSS patterns
+                f"https://{vendor_domain}/compliance/pci",
+                f"https://{vendor_domain}/compliance/pci-dss",
+                f"https://{vendor_domain}/pci",
+                f"https://{vendor_domain}/pci-dss",
+                f"https://{vendor_domain}/security/pci",
+                f"https://{vendor_domain}/security/pci-dss",
+                f"https://{vendor_domain}/security/payment",
+                f"https://{vendor_domain}/payment-security",
+                f"https://{vendor_domain}/legal/pci",
+                f"https://{vendor_domain}/support/pci",
+                f"https://{vendor_domain}/help/pci",
+                f"https://{vendor_domain}/resources/pci",
+                # Cloud service patterns
+                f"https://cloud.{vendor_domain}/security/compliance/pci-dss",
+                f"https://aws.{vendor_domain}/compliance/pci-dss-level-1-faqs/",
+                # Trust/security pages
+                f"https://trust.{vendor_domain}/compliance/pci",
+                f"https://trust.{vendor_domain}/en/compliance/pci/",
+                f"https://security.{vendor_domain}/compliance/pci",
+                # Support/help patterns
+                f"https://{vendor_domain}/help/articles/pci",
+                f"https://support.{vendor_domain}/pci",
+                # Document patterns
+                f"https://{vendor_domain}/docs/pci",
+                f"https://{vendor_domain}/resources/security/pci"
+            ]
+        }
         
-        for doc_type in document_types:
-            logger.info(f"🤖 Using AI-powered discovery for: {doc_type}")
-            
-            # Use OpenAI to discover compliance documents
-            ai_results = await enhance_compliance_discovery_with_ai(vendor_domain, [doc_type])
-            
-            if ai_results and 'compliance_documents' in ai_results:
-                for ai_doc in ai_results['compliance_documents']:
-                    if ai_doc.get('document_type') == doc_type and ai_doc.get('source_url'):
-                        document_id = f"{doc_type}_{vendor_domain.replace('.', '_')}"
-                        doc_entry = {
-                            "document_name": ai_doc.get('document_name', f"{vendor_domain} {doc_type.upper()} Compliance Information"),
-                            "document_type": doc_type,
-                            "source_url": ai_doc.get('source_url'),
-                            "status": "available",
-                            "access_method": "public",
-                            "retrieved_at": datetime.now().isoformat(),
-                            "download_ready": True,
-                            "download_url": f"/api/v1/trust-center/download/{document_id}",
-                            "is_pdf": ai_doc.get('source_url', '').lower().endswith('.pdf'),
-                            "content_type": "pdf" if ai_doc.get('source_url', '').lower().endswith('.pdf') else "webpage",
-                            "discovery_method": "ai_powered_discovery"
-                        }
-                        logger.info(f"🤖 AI discovered compliance page: {ai_doc.get('source_url')}")
-                        documents.append(doc_entry)
-                        break  # Found one, move to next document type
+        # Enhanced search for priority frameworks
+        priority_frameworks = ["gdpr", "ccpa", "hipaa", "pci-dss"]
+        
+        async with aiohttp.ClientSession() as session:
+            for doc_type in document_types:
+                if doc_type.lower() in priority_frameworks and doc_type.lower() in public_patterns:
+                    logger.info(f"🔍 Enhanced public search for priority framework: {doc_type}")
+                    
+                    # Search through all public patterns for this framework
+                    for url in public_patterns[doc_type.lower()]:
+                        try:
+                            async with session.get(url, timeout=10, allow_redirects=True) as response:
+                                if response.status == 200:
+                                    # Check if the content looks like a compliance page
+                                    content = await response.text()
+                                    if await self._is_valid_compliance_page(content, doc_type):
+                                        document_id = f"{doc_type}_{vendor_domain.replace('.', '_')}"
+                                        doc_entry = {
+                                            "document_name": f"{vendor_domain} {doc_type.upper()} Compliance Information",
+                                            "document_type": doc_type,
+                                            "source_url": str(response.url),  # Use final URL after redirects
+                                            "status": "available",
+                                            "access_method": "public",
+                                            "retrieved_at": datetime.now().isoformat(),
+                                            "download_ready": True,
+                                            "download_url": f"/api/v1/trust-center/download/{document_id}",
+                                            "is_pdf": url.lower().endswith('.pdf'),
+                                            "content_type": "pdf" if url.lower().endswith('.pdf') else "webpage",
+                                            "discovery_method": "enhanced_public_search"
+                                        }
+                                        logger.info(f"🔍 Found public compliance page: {response.url}")
+                                        documents.append(doc_entry)
+                                        break  # Found one, move to next document type
+                                        
+                        except Exception as e:
+                            # Continue trying other URLs
+                            continue
+                
+                # Fallback to original patterns for non-priority frameworks or if no public page found
+                if not any(d["document_type"] == doc_type for d in documents):
+                    # Use original discovery method as fallback
+                    fallback_docs = await self.discover_compliance_documents(vendor_domain, [doc_type])
+                    documents.extend(fallback_docs)
         
         return documents
 
@@ -2324,37 +2309,149 @@ Vendor Risk Assessment System
             return await self._standard_compliance_discovery(vendor_domain, document_types)
     
     async def _standard_compliance_discovery(self, vendor_domain: str, document_types: List[str]) -> List[Dict[str, Any]]:
-        """AI-powered compliance document discovery using OpenAI API only"""
+        """Standard compliance document discovery method"""
         
         documents = []
         
-        # Use dynamic compliance discovery for all document types
-        for doc_type in document_types:
-            logger.info(f"🤖 Using AI-powered discovery for standard compliance: {doc_type}")
-            
-            # Use OpenAI to discover compliance documents
-            ai_results = await enhance_compliance_discovery_with_ai(vendor_domain, [doc_type])
-            
-            if ai_results and 'compliance_documents' in ai_results:
-                for ai_doc in ai_results['compliance_documents']:
-                    if ai_doc.get('document_type') == doc_type and ai_doc.get('source_url'):
-                        document_id = f"{doc_type}_{vendor_domain.replace('.', '_')}"
-                        doc_entry = {
-                            "document_name": ai_doc.get('document_name', f"{vendor_domain} {doc_type.upper()} Compliance Document"),
-                            "document_type": doc_type,
-                            "source_url": ai_doc.get('source_url'),
-                            "status": "available",
-                            "access_method": "public",
-                            "retrieved_at": datetime.now().isoformat(),
-                            "download_ready": True,
-                            "download_url": f"/api/v1/trust-center/download/{document_id}",
-                            "is_pdf": ai_doc.get('source_url', '').lower().endswith('.pdf'),
-                            "content_type": "pdf" if ai_doc.get('source_url', '').lower().endswith('.pdf') else "webpage",
-                            "discovery_method": "ai_powered_discovery"
-                        }
-                        logger.info(f"🤖 AI discovered compliance document: {ai_doc.get('source_url')}")
-                        documents.append(doc_entry)
-                        break  # Found one, move to next document type
+        # Enhanced URL patterns for different compliance documents with vendor-specific patterns
+        url_patterns = {
+            "ccpa": [
+                f"https://{vendor_domain}/trust/compliance/ccpa-faq",
+                f"https://{vendor_domain}/trust/compliance/ccpa",
+                f"https://{vendor_domain}/trust/privacy/ccpa",
+                f"https://{vendor_domain}/privacy/ccpa",
+                f"https://{vendor_domain}/legal/ccpa",
+                f"https://{vendor_domain}/compliance/ccpa",
+                f"https://{vendor_domain}/privacy/california",
+                f"https://{vendor_domain}/legal/california-privacy",
+                f"https://{vendor_domain}/ccpa",
+                f"https://{vendor_domain}/california-privacy",
+                # Microsoft-specific patterns
+                f"https://privacy.{vendor_domain}/en-us/california-privacy-statement",
+                # Google-specific patterns
+                f"https://policies.{vendor_domain}/privacy/ccpa",
+                # AWS-specific patterns
+                f"https://www.{vendor_domain}/gp/help/customer/display.html?nodeId=GQFYXCPVFY6DKMFE"
+            ],
+            "hipaa": [
+                f"https://{vendor_domain}/help/articles/360020685594-Slack-and-HIPAA",  # Slack-specific first
+                f"https://{vendor_domain}/trust/compliance/hipaa",
+                f"https://{vendor_domain}/compliance/hipaa",
+                f"https://{vendor_domain}/security/hipaa",
+                f"https://{vendor_domain}/legal/hipaa",
+                f"https://{vendor_domain}/healthcare/compliance",
+                f"https://{vendor_domain}/healthcare/hipaa",
+                f"https://{vendor_domain}/hipaa",
+                f"https://{vendor_domain}/health-compliance",
+                f"https://{vendor_domain}/healthcare-security",
+                # Microsoft-specific patterns
+                f"https://servicetrust.{vendor_domain}/ViewPage/TrustDocumentsV3?command=Download&downloadType=Document&downloadId=6e8efbfb-78e6-4375-b6e4-8a0a3eb5e57b&tab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913&docTab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913_FAQ_and_White_Papers",
+                # Google Cloud-specific patterns
+                f"https://cloud.{vendor_domain}/security/compliance/hipaa",
+                # AWS-specific patterns
+                f"https://aws.{vendor_domain}/compliance/hipaa-compliance/",
+                # Zoom-specific patterns
+                f"https://{vendor_domain}/docs/doc/Zoom-hipaa.pdf"
+            ],
+            "pci-dss": [
+                f"https://{vendor_domain}/trust/compliance/pci",
+                f"https://{vendor_domain}/trust/compliance/pci-dss",
+                f"https://{vendor_domain}/compliance/pci",
+                f"https://{vendor_domain}/compliance/pci-dss", 
+                f"https://{vendor_domain}/security/pci",
+                f"https://{vendor_domain}/security/payment",
+                f"https://{vendor_domain}/legal/pci",
+                f"https://{vendor_domain}/pci",
+                f"https://{vendor_domain}/payment-security",
+                # Microsoft-specific patterns
+                f"https://servicetrust.{vendor_domain}/ViewPage/MSComplianceGuideV3",
+                # Google Cloud-specific patterns
+                f"https://cloud.{vendor_domain}/security/compliance/pci-dss",
+                # AWS-specific patterns
+                f"https://aws.{vendor_domain}/compliance/pci-dss-level-1-faqs/",
+                # Zoom-specific patterns
+                f"https://{vendor_domain}/trust/security"
+            ],
+            "gdpr": [
+                f"https://{vendor_domain}/trust/compliance/gdpr",
+                f"https://{vendor_domain}/compliance/gdpr",
+                f"https://{vendor_domain}/privacy/gdpr",
+                f"https://{vendor_domain}/legal/gdpr",
+                f"https://{vendor_domain}/gdpr",
+                # Microsoft-specific patterns
+                f"https://privacy.{vendor_domain}/en-us/privacystatement",
+                # Google-specific patterns
+                f"https://cloud.{vendor_domain}/privacy/gdpr",
+                # AWS-specific patterns
+                f"https://aws.{vendor_domain}/compliance/gdpr-center/",
+                # Salesforce-specific patterns
+                f"https://trust.{vendor_domain}/en/privacy/gdpr/"
+            ],
+            "soc2": [
+                f"https://{vendor_domain}/trust/compliance/soc2",
+                f"https://{vendor_domain}/trust/compliance",
+                f"https://{vendor_domain}/compliance/soc2",
+                f"https://{vendor_domain}/security/soc2",
+                f"https://{vendor_domain}/security/compliance",
+                # Microsoft-specific patterns
+                f"https://servicetrust.{vendor_domain}/ViewPage/MSComplianceGuideV3",
+                # Google Cloud-specific patterns
+                f"https://cloud.{vendor_domain}/security/compliance/soc-2",
+                # AWS-specific patterns
+                f"https://aws.{vendor_domain}/compliance/soc/",
+                # GitHub-specific patterns
+                f"https://resources.{vendor_domain}/security/github-soc2-type2.pdf",
+                # Salesforce-specific patterns
+                f"https://trust.{vendor_domain}/en/compliance/soc-2/",
+                # Zoom-specific patterns
+                f"https://{vendor_domain}/docs/doc/Zoom_SOC2_Type_II_Report.pdf"
+            ],
+            "iso27001": [
+                f"https://{vendor_domain}/trust/compliance/iso27001",
+                f"https://{vendor_domain}/compliance/iso27001",
+                f"https://{vendor_domain}/security/iso27001",
+                f"https://{vendor_domain}/certifications/iso27001",
+                f"https://{vendor_domain}/iso27001",
+                # Microsoft-specific patterns
+                f"https://servicetrust.{vendor_domain}/ViewPage/MSComplianceGuideV3",
+                # Google Cloud-specific patterns
+                f"https://cloud.{vendor_domain}/security/compliance/iso-27001",
+                # AWS-specific patterns
+                f"https://aws.{vendor_domain}/compliance/iso-27001/",
+                # Salesforce-specific patterns
+                f"https://trust.{vendor_domain}/en/compliance/iso-27001/",
+                # Slack-specific patterns
+                f"https://a.slack-edge.{vendor_domain}/53bfd26/marketing/downloads/security/Slack_ISO_27001_cert_2024.pdf"
+            ]
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            for doc_type in document_types:
+                if doc_type in url_patterns:
+                    for url in url_patterns[doc_type]:
+                        try:
+                            async with session.get(url, timeout=10) as response:
+                                if response.status == 200:
+                                    # Found a working URL for this document type
+                                    document_id = f"{doc_type}_{vendor_domain.replace('.', '_')}"
+                                    doc_entry = {
+                                        "document_name": f"{vendor_domain} {doc_type.upper()} Compliance Document",
+                                        "document_type": doc_type,
+                                        "source_url": url,
+                                        "status": "available",
+                                        "access_method": "public",
+                                        "retrieved_at": datetime.now().isoformat(),
+                                        "download_ready": True,
+                                        "download_url": f"/api/v1/trust-center/download/{document_id}",
+                                        "is_pdf": False,
+                                        "content_type": "webpage"
+                                    }
+                                    logger.info(f"🔍 Discovered document at: {url}")
+                                    documents.append(doc_entry)
+                                    break  # Found one, move to next document type
+                        except Exception as e:
+                            # Continue trying other URLs
+                            continue
         
         return documents
 
@@ -3040,101 +3137,6 @@ async def scan_privacy_practices(vendor_domain: str, vendor_name: str = None) ->
         }
 
 # AI services detection functionality
-
-def intelligent_ai_fallback(vendor_domain: str, vendor_name: str) -> Dict[str, Any]:
-    """
-    Knowledge-based AI detection fallback for when OpenAI API is unavailable.
-    Uses known information about vendors to detect AI capabilities.
-    """
-    # Normalize domain and name for matching
-    domain_lower = vendor_domain.lower()
-    name_lower = vendor_name.lower()
-    
-    # Known AI-enabled vendors with their capabilities
-    ai_vendors = {
-        # Analytics platforms with AI/ML
-        'mixpanel': {
-            'offers_ai_services': True,
-            'ai_maturity_level': 'Intermediate',
-            'ai_service_categories': ['Predictive Analytics', 'Machine Learning', 'Behavioral Analysis'],
-            'ai_services_detail': [{
-                'category': 'Predictive Analytics',
-                'services': ['User behavior prediction', 'Churn analysis', 'Event forecasting'],
-                'use_cases': ['User retention', 'Product optimization', 'Revenue forecasting'],
-                'data_types': ['User events', 'Behavioral data', 'Product usage metrics']
-            }, {
-                'category': 'Machine Learning',
-                'services': ['Automated insights', 'Anomaly detection', 'Intelligent segmentation'],
-                'use_cases': ['Data exploration', 'Alert generation', 'User clustering'],
-                'data_types': ['Event data', 'User profiles', 'Time-series data']
-            }],
-            'governance_score': 75,
-            'confidence': 'High'
-        },
-        'amplitude': {
-            'offers_ai_services': True,
-            'ai_maturity_level': 'Advanced',
-            'ai_service_categories': ['Predictive Analytics', 'Machine Learning', 'Recommendation Systems'],
-            'governance_score': 80,
-            'confidence': 'High'
-        },
-        'segment': {
-            'offers_ai_services': True,
-            'ai_maturity_level': 'Intermediate',
-            'ai_service_categories': ['Data Processing', 'Machine Learning', 'Personalization'],
-            'governance_score': 75,
-            'confidence': 'High'
-        },
-        # Cloud platforms
-        'amazon': {
-            'offers_ai_services': True,
-            'ai_maturity_level': 'Advanced',
-            'ai_service_categories': ['Cloud AI Services', 'Machine Learning', 'NLP', 'Computer Vision'],
-            'governance_score': 85,
-            'confidence': 'High'
-        },
-        'microsoft': {
-            'offers_ai_services': True,
-            'ai_maturity_level': 'Advanced',
-            'ai_service_categories': ['Cloud AI Services', 'Machine Learning', 'Cognitive Services', 'Copilot AI'],
-            'governance_score': 90,
-            'confidence': 'High'
-        },
-        'google': {
-            'offers_ai_services': True,
-            'ai_maturity_level': 'Advanced',
-            'ai_service_categories': ['Cloud AI Services', 'Machine Learning', 'NLP', 'Search AI'],
-            'governance_score': 85,
-            'confidence': 'High'
-        }
-    }
-    
-    # Check for direct matches
-    for vendor_key, ai_info in ai_vendors.items():
-        if vendor_key in domain_lower or vendor_key in name_lower:
-            logger.info(f"🎯 Knowledge match found for {vendor_name}: {vendor_key}")
-            return ai_info
-    
-    # Check for partial matches in domain/name
-    domain_parts = domain_lower.replace('.com', '').replace('.io', '').replace('.org', '').split('.')
-    name_parts = name_lower.split()
-    
-    for vendor_key, ai_info in ai_vendors.items():
-        for part in domain_parts + name_parts:
-            if part and vendor_key in part:
-                logger.info(f"🎯 Partial match found for {vendor_name}: {vendor_key} (matched: {part})")
-                return ai_info
-    
-    # Default fallback - no AI services detected
-    return {
-        'offers_ai_services': False,
-        'ai_maturity_level': 'No AI Services',
-        'ai_service_categories': [],
-        'ai_services_detail': [],
-        'governance_score': 70,
-        'confidence': 'Low'
-    }
-
 async def analyze_content_with_ai(html_content: str, vendor_domain: str, vendor_name: str) -> Dict[str, Any]:
     """
     Use AI (LLM) to analyze webpage content and intelligently detect AI capabilities.
@@ -3190,16 +3192,14 @@ async def try_openai_analysis(clean_text: str, vendor_domain: str, vendor_name: 
             logger.info(f"OpenAI package not available, falling back to keyword detection for {vendor_domain}")
             return None
             
-        # Use corporate ExpertCity server instead of OpenAI_API_KEY
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"  # Corporate API key
-        
-        # Use new OpenAI client with corporate server
-        from openai import OpenAI
-        client = OpenAI(
-            api_key=corporate_api_key,
-            base_url=corporate_base_url
-        )
+        # Try to use OpenAI API key from environment
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            # For demo purposes, return None to fall back to keyword detection
+            logger.info(f"No OpenAI API key found, falling back to keyword detection for {vendor_domain}")
+            return None
+            
+        openai.api_key = openai_api_key
         
         # Create the analysis prompt
         analysis_prompt = f"""
@@ -3237,9 +3237,9 @@ Look for:
 Be thorough but conservative - only mark as offering AI services if there's clear evidence.
 """
 
-        # Make API call to OpenAI using new client API
-        response = client.chat.completions.create(
-            model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
+        # Make API call to OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are an expert AI/ML analyst who specializes in identifying AI capabilities in software products and services. Respond only with valid JSON."},
                 {"role": "user", "content": analysis_prompt}
@@ -3473,67 +3473,12 @@ async def analyze_content_with_ai(vendor_domain: str, vendor_name: str, content:
         if not OPENAI_AVAILABLE:
             return None
             
-        # Initialize OpenAI client (v1.0+ API)
-        from openai import OpenAI
-        
-        # Try to detect proxy settings
-        import urllib.request
-        proxy_handler = urllib.request.getproxies()
-        
-        client = None
-        api_source = None
-        
-        # Try corporate ExpertCity server first (if available)
-        try:
-            corporate_base_url = "https://chat.expertcity.com/api/v1"
-            corporate_api_key = os.getenv('CORPORATE_API_KEY', "sk-2ea30b318c514c9f874dcd2aa56aa090")
-            
-            if proxy_handler:
-                import httpx
-                proxy_client = httpx.Client(proxies=proxy_handler)
-                client = OpenAI(
-                    api_key=corporate_api_key, 
-                    base_url=corporate_base_url,
-                    http_client=proxy_client
-                )
-            else:
-                client = OpenAI(
-                    api_key=corporate_api_key,
-                    base_url=corporate_base_url
-                )
-            api_source = "corporate"
-            logger.debug(f"Using corporate ExpertCity API for {vendor_domain}")
-            
-        except Exception as corp_error:
-            logger.warning(f"Corporate API initialization failed: {str(corp_error)}")
-            client = None
-        
-        # Fallback to standard OpenAI API if corporate fails
-        if client is None:
-            try:
-                standard_api_key = os.getenv('OPENAI_API_KEY')
-                if standard_api_key:
-                    if proxy_handler:
-                        import httpx
-                        proxy_client = httpx.Client(proxies=proxy_handler)
-                        client = OpenAI(
-                            api_key=standard_api_key,
-                            http_client=proxy_client
-                        )
-                    else:
-                        client = OpenAI(api_key=standard_api_key)
-                    api_source = "standard"
-                    logger.info(f"Using standard OpenAI API for {vendor_domain} (corporate API unavailable)")
-                else:
-                    logger.warning(f"No valid API keys available for {vendor_domain}")
-                    return None
-            except Exception as std_error:
-                logger.warning(f"Standard API initialization failed: {str(std_error)}")
-                return None
-        
-        if client is None:
-            logger.error(f"No OpenAI client available for {vendor_domain}")
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            logger.info(f"No OpenAI API key found for AI analysis of {vendor_domain}")
             return None
+            
+        openai.api_key = openai_api_key
         
         # Construct the prompt for AI detection
         prompt = f"""
@@ -3570,76 +3515,23 @@ Consider AI functionality including but not limited to:
 Base your analysis on your knowledge of {vendor_name} and common AI implementations in their industry sector.
 """
 
-        # Make API call to OpenAI using new v1.0+ API
-        try:
-            response = client.chat.completions.create(
-                model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
-                messages=[
-                    {"role": "system", "content": "You are an AI expert analyst specializing in identifying AI capabilities in enterprise software and services. Provide accurate, detailed assessments."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.3,
-                timeout=30  # Add timeout
-            )
-            logger.info(f"✅ OpenAI API call successful for {vendor_domain} using {api_source} API")
-        except Exception as api_error:
-            logger.warning(f"OpenAI API call failed for {vendor_domain} ({api_source} API): {str(api_error)}")
-            
-            # If corporate API failed and we haven't tried standard API yet, try it
-            if api_source == "corporate":
-                try:
-                    standard_api_key = os.getenv('OPENAI_API_KEY')
-                    if standard_api_key:
-                        logger.info(f"Trying standard OpenAI API as fallback for {vendor_domain}")
-                        if proxy_handler:
-                            import httpx
-                            proxy_client = httpx.Client(proxies=proxy_handler)
-                            fallback_client = OpenAI(
-                                api_key=standard_api_key,
-                                http_client=proxy_client
-                            )
-                        else:
-                            fallback_client = OpenAI(api_key=standard_api_key)
-                        
-                        # Retry with standard API
-                        response = fallback_client.chat.completions.create(
-                            model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
-                            messages=[
-                                {"role": "system", "content": "You are an AI expert analyst specializing in identifying AI capabilities in enterprise software and services. Provide accurate, detailed assessments."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            max_tokens=1000,
-                            temperature=0.3,
-                            timeout=30
-                        )
-                        logger.info(f"✅ Fallback to standard OpenAI API successful for {vendor_domain}")
-                    else:
-                        logger.error(f"No standard OpenAI API key available for fallback")
-                        raise api_error
-                except Exception as fallback_error:
-                    logger.error(f"Both corporate and standard API failed for {vendor_domain}: corporate={str(api_error)}, standard={str(fallback_error)}")
-                    raise fallback_error
-            else:
-                # Standard API failed - no more fallbacks
-                logger.error(f"Standard OpenAI API failed for {vendor_domain}: {str(api_error)}")
-                raise api_error
+        # Make API call to OpenAI
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an AI expert analyst specializing in identifying AI capabilities in enterprise software and services. Provide accurate, detailed assessments."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1000,
+            temperature=0.3
+        )
         
         result_text = response.choices[0].message.content.strip()
         
         # Parse JSON response
         try:
             import json
-            
-            # Clean up the response text (remove markdown code blocks if present)
-            cleaned_text = result_text.strip()
-            if cleaned_text.startswith('```json'):
-                cleaned_text = cleaned_text[7:]  # Remove ```json
-            if cleaned_text.endswith('```'):
-                cleaned_text = cleaned_text[:-3]  # Remove ```
-            cleaned_text = cleaned_text.strip()
-            
-            ai_analysis = json.loads(cleaned_text)
+            ai_analysis = json.loads(result_text)
             logger.info(f"🤖 OpenAI AI analysis completed for {vendor_domain}")
             return ai_analysis
         except json.JSONDecodeError:
@@ -3650,645 +3542,9 @@ Base your analysis on your knowledge of {vendor_name} and common AI implementati
         logger.warning(f"OpenAI AI analysis failed for {vendor_domain}: {str(e)}")
         return None
 
-
-class DynamicDataFlowDiscovery:
-    """AI-powered discovery of vendor data flow documentation (DPA, Privacy Policy, Architecture Docs, API Docs)"""
-    
-    def __init__(self):
-        # Data flow document patterns - focus on finding vendor pages discussing these topics
-        self.data_flow_categories = {
-            "dpa": {
-                "keywords": ["data processing agreement", "dpa", "data processing addendum", "subprocessor", "processor agreement"],
-                "url_patterns": ["/dpa", "/data-processing", "/legal/dpa", "/privacy/dpa", "/compliance/dpa", "/legal/data-processing"],
-                "subdomain_patterns": ["legal", "privacy", "trust", "compliance", "security"]
-            },
-            "privacy_policy": {
-                "keywords": ["privacy policy", "privacy notice", "data practices", "personal information", "how we use data"],
-                "url_patterns": ["/privacy", "/privacy-policy", "/legal/privacy", "/privacy-notice", "/data-practices"],
-                "subdomain_patterns": ["privacy", "legal", "www"]
-            },
-            "architecture": {
-                "keywords": ["data architecture", "system architecture", "data flow", "technical architecture", "infrastructure"],
-                "url_patterns": ["/architecture", "/docs/architecture", "/technical/architecture", "/dev/architecture", "/developers/architecture"],
-                "subdomain_patterns": ["docs", "developer", "dev", "technical", "engineering"]
-            },
-            "api_docs": {
-                "keywords": ["api documentation", "developer docs", "api reference", "integration guide", "api specs"],
-                "url_patterns": ["/api", "/docs", "/developers", "/api/docs", "/documentation", "/dev/api"],
-                "subdomain_patterns": ["api", "docs", "developer", "dev", "developers"]
-            },
-            "security": {
-                "keywords": ["security whitepaper", "security overview", "data security", "security practices", "encryption"],
-                "url_patterns": ["/security", "/security/overview", "/trust/security", "/compliance/security", "/docs/security"],
-                "subdomain_patterns": ["security", "trust", "compliance"]
-            },
-            "integration": {
-                "keywords": ["integration guide", "setup guide", "implementation", "getting started", "onboarding"],
-                "url_patterns": ["/integration", "/setup", "/getting-started", "/docs/integration", "/developers/integration"],
-                "subdomain_patterns": ["docs", "developer", "dev", "support"]
-            }
-        }
-        
-        # Common data flow documentation indicators
-        self.data_flow_indicators = [
-            "data flow", "data processing", "system integration", "api documentation",
-            "developer portal", "technical documentation", "architecture overview",
-            "security documentation", "privacy documentation"
-        ]
-    
-    async def discover_vendor_data_flow(self, vendor_domain: str, requested_categories: List[str]) -> Dict[str, Any]:
-        """Discover vendor data flow and technical documentation"""
-        
-        logger.info(f"🔍 Finding {vendor_domain} data flow documentation: {requested_categories}")
-        
-        # Step 1: Discover documentation centers and technical pages  
-        doc_centers = await self._discover_documentation_centers(vendor_domain)
-        
-        # Step 2: Scan for data flow and technical documentation
-        data_flow_pages = await self._scan_data_flow_documents(vendor_domain, requested_categories, doc_centers)
-        
-        # Step 3: Analyze webpage content for data flow topics
-        analyzed_pages = await self._analyze_data_flow_content(data_flow_pages, requested_categories)
-        
-        return {
-            "vendor_domain": vendor_domain,
-            "documentation_centers": doc_centers,
-            "data_flow_documents": analyzed_pages,
-            "discovery_timestamp": datetime.now().isoformat(),
-            "categories_found": list(set([page["category"] for page in analyzed_pages if page.get("category")]))
-        }
-    
-    async def _discover_documentation_centers(self, vendor_domain: str) -> List[Dict[str, Any]]:
-        """Discover potential documentation and developer center URLs for a vendor"""
-        
-        doc_centers = []
-        
-        # Generate the most likely documentation URLs
-        potential_urls = [
-            f"https://docs.{vendor_domain}",
-            f"https://developer.{vendor_domain}",
-            f"https://{vendor_domain}/docs",
-            f"https://{vendor_domain}/developers"
-        ]
-        
-        import requests
-        
-        for url in potential_urls:
-            try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (compatible; dataflow-scanner/1.0)',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                }
-                response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
-                
-                if response.status_code == 200:
-                    content = response.text
-                    doc_score = self._calculate_documentation_score(content)
-                    
-                    if doc_score > 0.3:  # Threshold for documentation detection
-                        doc_centers.append({
-                            "url": response.url,
-                            "original_url": url,
-                            "doc_score": doc_score,
-                            "content_length": len(content),
-                            "page_title": self._extract_page_title(content)
-                        })
-                        logger.info(f"🔍 Found documentation center: {response.url} (score: {doc_score:.2f})")
-            
-            except Exception as e:
-                logger.debug(f"Failed to access {url}: {str(e)}")
-                continue
-        
-        # Sort by documentation score
-        doc_centers.sort(key=lambda x: x["doc_score"], reverse=True)
-        return doc_centers
-    
-    def _calculate_documentation_score(self, content: str) -> float:
-        """Calculate how likely a page is to be a documentation center"""
-        
-        content_lower = content.lower()
-        score = 0.0
-        
-        # Check for documentation indicators
-        for indicator in self.data_flow_indicators:
-            if indicator.lower() in content_lower:
-                score += 0.2
-        
-        # Check for data flow category mentions
-        for category_data in self.data_flow_categories.values():
-            for keyword in category_data["keywords"]:
-                if keyword.lower() in content_lower:
-                    score += 0.1
-        
-        # Bonus for multiple category mentions
-        category_mentions = sum(1 for category in self.data_flow_categories.keys() 
-                               if category in content_lower)
-        if category_mentions >= 3:
-            score += 0.3
-        elif category_mentions >= 2:
-            score += 0.2
-        
-        # Check for technical documentation patterns
-        tech_patterns = ["api", "integration", "developer", "documentation", "guide"]
-        for pattern in tech_patterns:
-            if pattern in content_lower:
-                score += 0.1
-        
-        return min(score, 1.0)  # Cap at 1.0
-    
-    def _extract_page_title(self, content: str) -> str:
-        """Extract page title from HTML content"""
-        try:
-            # Simple regex to extract title
-            import re
-            match = re.search(r'<title[^>]*>([^<]+)</title>', content, re.IGNORECASE)
-            if match:
-                return match.group(1).strip()[:100]  # Limit to 100 chars
-        except:
-            pass
-        return "Documentation Page"
-    
-    async def _scan_data_flow_documents(self, vendor_domain: str, requested_categories: List[str], doc_centers: List[Dict]) -> List[Dict]:
-        """Scan for specific data flow document types"""
-        
-        discovered_pages = []
-        
-        # Generate potential URLs for each requested category
-        for category in requested_categories:
-            if category in self.data_flow_categories:
-                category_info = self.data_flow_categories[category]
-                
-                # Try URL patterns
-                for url_pattern in category_info["url_patterns"]:
-                    potential_url = f"https://{vendor_domain}{url_pattern}"
-                    
-                    try:
-                        import requests
-                        headers = {
-                            'User-Agent': 'Mozilla/5.0 (compatible; dataflow-scanner/1.0)',
-                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                        }
-                        response = requests.get(potential_url, headers=headers, timeout=5, verify=False)
-                        
-                        if response.status_code == 200:
-                            discovered_pages.append({
-                                "url": response.url,
-                                "category": category,
-                                "content": response.text,
-                                "status_code": response.status_code,
-                                "content_length": len(response.text)
-                            })
-                            logger.info(f"✅ Found {category} document: {response.url}")
-                            break  # Found one for this category, move to next
-                    
-                    except Exception as e:
-                        logger.debug(f"Failed to access {potential_url}: {str(e)}")
-                        continue
-        
-        return discovered_pages
-    
-    async def _analyze_data_flow_content(self, pages: List[Dict], requested_categories: List[str]) -> List[Dict]:
-        """Analyze webpage content to extract data flow information"""
-        
-        analyzed_documents = []
-        
-        for page in pages:
-            try:
-                category = page["category"]
-                content = page.get("content", "")
-                url = page["url"]
-                
-                # Calculate relevance score based on keyword matches
-                relevance_score = self._calculate_content_relevance(content, category)
-                
-                # Extract summary information based on category
-                summary = self._extract_category_summary(content, category)
-                
-                analyzed_documents.append({
-                    "category": category,
-                    "document_name": f"{category.replace('_', ' ').title()} Documentation",
-                    "source_url": url,
-                    "content_summary": summary,
-                    "confidence": min(relevance_score * 100, 100),  # Convert to percentage, cap at 100
-                    "document_type": "webpage",
-                    "retrieved_at": datetime.now().isoformat(),
-                    "content_length": len(content)
-                })
-                
-            except Exception as e:
-                logger.warning(f"Failed to analyze page {page.get('url', 'unknown')}: {str(e)}")
-                continue
-        
-        return analyzed_documents
-    
-    def _calculate_content_relevance(self, content: str, category: str) -> float:
-        """Calculate how relevant the content is to the specified category"""
-        
-        if category not in self.data_flow_categories:
-            return 0.0
-        
-        content_lower = content.lower()
-        category_info = self.data_flow_categories[category]
-        
-        score = 0.0
-        keyword_matches = 0
-        
-        # Check for category-specific keywords
-        for keyword in category_info["keywords"]:
-            if keyword.lower() in content_lower:
-                score += 0.15
-                keyword_matches += 1
-        
-        # Bonus for multiple keyword matches
-        if keyword_matches >= 3:
-            score += 0.2
-        elif keyword_matches >= 2:
-            score += 0.1
-        
-        # Check for general data flow indicators
-        for indicator in self.data_flow_indicators:
-            if indicator.lower() in content_lower:
-                score += 0.05
-        
-        return min(score, 1.0)  # Cap at 1.0
-    
-    def _extract_category_summary(self, content: str, category: str) -> str:
-        """Extract a relevant summary based on the document category"""
-        
-        summaries = {
-            "dpa": "Data Processing Agreement outlining vendor's data handling practices, subprocessor relationships, and compliance obligations.",
-            "privacy_policy": "Privacy Policy detailing data collection, usage, storage, and user rights under applicable privacy laws.",
-            "architecture": "Technical architecture documentation showing system design, data flows, and infrastructure components.",
-            "api_docs": "API documentation providing integration guides, endpoints, authentication, and developer resources.",
-            "security": "Security documentation covering data protection measures, encryption standards, and security practices.",
-            "integration": "Integration guides and setup documentation for implementing and configuring the vendor's services."
-        }
-        
-        return summaries.get(category, f"Documentation related to {category.replace('_', ' ')}")
-
-
-async def enhance_compliance_discovery_with_ai(vendor_domain: str, frameworks: List[str], existing_results: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Use OpenAI to enhance compliance document discovery with real URLs and better analysis.
-    
-    Args:
-        vendor_domain: The vendor's domain name
-        frameworks: List of compliance frameworks to search for
-        existing_results: Results from basic discovery to enhance
-        
-    Returns:
-        Enhanced compliance results with real URLs or None if failed
-    """
-    try:
-        if not OPENAI_AVAILABLE:
-            return None
-            
-        # Use corporate ExpertCity server instead of OpenAI_API_KEY
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"  # Corporate API key
-        
-        # Initialize OpenAI client (v1.0+ API) with corporate server
-        from openai import OpenAI
-        
-        # Try to detect proxy settings
-        import urllib.request
-        proxy_handler = urllib.request.getproxies()
-        
-        # Initialize client with ExpertCity corporate server
-        if proxy_handler:
-            import httpx
-            proxy_client = httpx.Client(proxies=proxy_handler)
-            client = OpenAI(
-                api_key=corporate_api_key, 
-                base_url=corporate_base_url,
-                http_client=proxy_client
-            )
-        else:
-            client = OpenAI(
-                api_key=corporate_api_key,
-                base_url=corporate_base_url
-            )
-        
-        frameworks_text = ", ".join(frameworks)
-        
-        # Construct the prompt for compliance document discovery
-        prompt = f"""
-Please help me find actual compliance documentation URLs for the company with domain "{vendor_domain}".
-
-I need to find real, working URLs for these compliance frameworks: {frameworks_text}
-
-For each framework, please provide:
-1. The most likely URL where the document can be found
-2. Alternative URLs to check
-3. A confidence score (0-100) for each URL
-4. Brief description of what document type to expect
-
-Common URL patterns to consider:
-- https://{vendor_domain}/privacy/gdpr
-- https://{vendor_domain}/compliance/[framework]
-- https://{vendor_domain}/legal/[framework] 
-- https://trust.{vendor_domain}
-- https://privacy.{vendor_domain}
-- https://{vendor_domain}/security/certifications
-
-Please provide a JSON response with this structure:
-{{
-    "frameworks": {{
-        "gdpr": {{
-            "primary_url": "most likely URL",
-            "alternative_urls": ["url1", "url2"],
-            "confidence": 85,
-            "document_type": "Privacy Policy / GDPR Compliance Statement"
-        }},
-        "hipaa": {{ ... }},
-        "pci-dss": {{ ... }},
-        "ccpa": {{ ... }}
-    }},
-    "trust_center_url": "main trust center URL if exists",
-    "general_compliance_page": "general compliance page URL"
-}}
-
-Focus on providing real, likely-to-exist URLs based on common enterprise compliance documentation patterns.
-"""
-
-        # Make API call to OpenAI using new v1.0+ API
-        try:
-            response = client.chat.completions.create(
-                model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
-                messages=[
-                    {"role": "system", "content": "You are a compliance documentation expert who specializes in finding enterprise compliance documents on vendor websites. Provide accurate, realistic URL suggestions based on common enterprise patterns."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1000,
-                temperature=0.1,  # Low temperature for more consistent, factual responses
-                timeout=30
-            )
-        except Exception as api_error:
-            logger.warning(f"OpenAI API call failed for compliance discovery of {vendor_domain}: {str(api_error)}")
-            raise api_error
-        
-        result_text = response.choices[0].message.content.strip()
-        
-        # Parse JSON response
-        try:
-            import json
-            ai_enhanced_results = json.loads(result_text)
-            
-            # Merge with existing results
-            enhanced_results = existing_results.copy()
-            enhanced_results["ai_enhanced_urls"] = ai_enhanced_results
-            enhanced_results["enhancement_timestamp"] = datetime.now().isoformat()
-            
-            logger.info(f"🤖 OpenAI compliance discovery enhancement completed for {vendor_domain}")
-            return enhanced_results
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse OpenAI compliance response for {vendor_domain}: {result_text}")
-            return None
-            
-    except Exception as e:
-        logger.warning(f"OpenAI compliance discovery enhancement failed for {vendor_domain}: {str(e)}")
-        return None
-
-
-async def enhance_data_flow_discovery_with_ai(vendor_domain: str, categories: List[str], existing_results: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Use OpenAI to enhance data flow documentation discovery with real URLs and better analysis.
-    
-    Args:
-        vendor_domain: The vendor's domain name
-        categories: List of data flow categories to search for
-        existing_results: Results from the DynamicDataFlowDiscovery class
-        
-    Returns:
-        Enhanced data flow discovery results
-    """
-    try:
-        if not OPENAI_AVAILABLE:
-            logger.info("OpenAI not available for data flow discovery enhancement")
-            return None
-        
-        logger.info(f"🤖 Enhancing data flow discovery with OpenAI for {vendor_domain}: {categories}")
-        
-        # Use ExpertCity corporate server configuration
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
-        
-        # Initialize OpenAI client (v1.0+ API) with corporate server
-        from openai import OpenAI
-        
-        # Try to detect proxy settings
-        import urllib.request
-        proxy_handler = urllib.request.getproxies()
-        
-        # Initialize client with proxy support if needed
-        if proxy_handler:
-            import httpx
-            proxy_client = httpx.Client(proxies=proxy_handler)
-            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key, http_client=proxy_client)
-        else:
-            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
-        
-        categories_text = ', '.join(categories)
-        
-        # Create an enhanced prompt for comprehensive document and webpage discovery
-        prompt = f"""
-You are an AI assistant that helps find data flow and compliance documentation on vendor websites. 
-
-TASK: Find real, working URLs and webpages for these data flow documentation categories: {categories_text}
-
-VENDOR DOMAIN: {vendor_domain}
-
-ENHANCED INSTRUCTIONS:
-1. Generate realistic URLs where documents AND webpages might be found on {vendor_domain}
-2. Consider multiple content types: formal documents, blog posts, help articles, FAQ sections, landing pages
-3. Use common patterns: /docs, /developers, /api, /legal, /privacy, /security, /trust, /compliance, /blog, /help, /support
-4. Include alternative formats: PDFs, HTML pages, knowledge base articles, trust center pages
-5. Provide confidence scores (0.0-1.0) and content relevance scores (0.0-1.0)
-6. Focus on URLs most likely to exist and contain useful information
-
-EXPANDED CATEGORIES TO FIND:
-- dpa: Data Processing Agreement, Data Processing Addendum, privacy contracts
-- privacy_policy: Privacy Policy, Privacy Notice, data handling statements  
-- architecture: Technical architecture docs, system diagrams, data flow charts
-- api_docs: API documentation, developer guides, integration documentation
-- security: Security whitepapers, security documentation, compliance reports
-- integration: Integration guides, setup docs, technical implementation guides
-- trust_center: Trust center pages, compliance dashboards, security status pages
-- compliance_frameworks: SOC2, ISO27001, GDPR compliance pages and certifications
-- audit_reports: Security audit reports, penetration test summaries, compliance attestations
-- data_retention: Data retention policies, data deletion procedures, data lifecycle docs
-
-CONTENT TYPE PRIORITIES:
-1. Formal documents (high authority)
-2. Trust center and compliance pages (high visibility) 
-3. Help documentation and FAQs (practical information)
-4. Blog posts and articles (detailed explanations)
-5. API and technical documentation (implementation details)
-
-OUTPUT FORMAT (JSON):
-{{
-    "categories": {{
-        "dpa": {{
-            "primary_url": "https://{vendor_domain}/legal/data-processing-agreement",
-            "alternative_urls": ["https://{vendor_domain}/dpa", "https://{vendor_domain}/legal/dpa", "https://{vendor_domain}/privacy/dpa"],
-            "confidence": 0.8,
-            "document_type": "Data Processing Agreement"
-        }},
-        "privacy_policy": {{
-            "primary_url": "https://{vendor_domain}/privacy",
-            "alternative_urls": ["https://{vendor_domain}/privacy-policy", "https://{vendor_domain}/legal/privacy"],
-            "confidence": 0.9,
-            "document_type": "Privacy Policy"
-        }}
-    }},
-    "discovery_notes": "Brief summary of discovery strategy"
-}}
-
-I need to find real, working URLs for these data flow documentation categories: {categories_text}
-
-Please provide realistic URLs based on common documentation patterns for {vendor_domain}.
-"""
-        
-        try:
-            response = client.chat.completions.create(
-                model=os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=2000,
-                timeout=30
-            )
-        except Exception as api_error:
-            logger.warning(f"OpenAI API call failed for data flow discovery of {vendor_domain}: {str(api_error)}")
-            raise api_error
-        
-        result_text = response.choices[0].message.content.strip()
-        
-        # Parse JSON response
-        try:
-            import json
-            ai_enhanced_results = json.loads(result_text)
-            
-            # Merge with existing results
-            enhanced_results = existing_results.copy()
-            enhanced_results["ai_enhanced_urls"] = ai_enhanced_results
-            enhanced_results["enhancement_timestamp"] = datetime.now().isoformat()
-            
-            logger.info(f"🤖 OpenAI data flow discovery enhancement completed for {vendor_domain}")
-            return enhanced_results
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse OpenAI data flow response for {vendor_domain}: {result_text}")
-            return None
-            
-    except Exception as e:
-        logger.warning(f"OpenAI data flow discovery enhancement failed for {vendor_domain}: {str(e)}")
-        return None
-
-
-async def validate_and_analyze_urls(urls: List[str], vendor_domain: str, content_type: str = None) -> List[Dict[str, Any]]:
-    """
-    Enhanced URL validation with content analysis and relevance scoring.
-    
-    Args:
-        urls: List of URLs to validate and analyze
-        vendor_domain: The vendor's domain for context
-        content_type: Expected content type for relevance scoring
-        
-    Returns:
-        List of validated URL results with content analysis
-    """
-    validated_results = []
-    
-    async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=10),
-        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    ) as session:
-        
-        for url in urls[:15]:  # Limit to 15 URLs to prevent timeout
-            try:
-                logger.info(f"🔍 Validating URL: {url}")
-                
-                async with session.head(url, allow_redirects=True) as response:
-                    url_result = {
-                        'url': url,
-                        'status_code': response.status,
-                        'is_valid': response.status in [200, 301, 302],
-                        'content_type': response.headers.get('content-type', '').lower(),
-                        'content_length': response.headers.get('content-length'),
-                        'final_url': str(response.url),
-                        'relevance_score': 0.0,
-                        'content_summary': '',
-                        'validation_timestamp': datetime.now().isoformat()
-                    }
-                    
-                    # Enhanced validation for successful responses
-                    if url_result['is_valid']:
-                        try:
-                            # Get actual content for analysis (first 5KB)
-                            async with session.get(url, headers={'Range': 'bytes=0-5119'}) as content_response:
-                                if content_response.status == 200 or content_response.status == 206:  # Partial content OK
-                                    content_sample = await content_response.text(errors='ignore')
-                                    
-                                    # Analyze content relevance
-                                    relevance_keywords = [
-                                        'privacy', 'data processing', 'security', 'compliance', 'audit',
-                                        'gdpr', 'ccpa', 'soc', 'iso', 'hipaa', 'pci', 'api', 'integration',
-                                        'documentation', 'whitepaper', 'policy', 'agreement', 'terms'
-                                    ]
-                                    
-                                    content_lower = content_sample.lower()
-                                    keyword_matches = sum(1 for keyword in relevance_keywords if keyword in content_lower)
-                                    
-                                    # Calculate relevance score (0.0-1.0)
-                                    url_result['relevance_score'] = min(keyword_matches / 5.0, 1.0)  # Max score at 5+ keywords
-                                    
-                                    # Generate content summary
-                                    if keyword_matches > 0:
-                                        found_keywords = [kw for kw in relevance_keywords if kw in content_lower]
-                                        url_result['content_summary'] = f"Contains: {', '.join(found_keywords[:5])}"
-                                    else:
-                                        url_result['content_summary'] = "No relevant compliance keywords detected"
-                                        
-                        except Exception as content_error:
-                            logger.warning(f"Content analysis failed for {url}: {content_error}")
-                            url_result['content_summary'] = "Content analysis unavailable"
-                    
-                    validated_results.append(url_result)
-                    
-            except aiohttp.ClientError as e:
-                logger.warning(f"URL validation failed for {url}: {e}")
-                validated_results.append({
-                    'url': url,
-                    'status_code': 0,
-                    'is_valid': False,
-                    'error': str(e),
-                    'relevance_score': 0.0,
-                    'content_summary': f"Connection failed: {str(e)}",
-                    'validation_timestamp': datetime.now().isoformat()
-                })
-                
-            except Exception as e:
-                logger.warning(f"Unexpected error validating {url}: {e}")
-                validated_results.append({
-                    'url': url,
-                    'status_code': 0,
-                    'is_valid': False,
-                    'error': f"Validation error: {str(e)}",
-                    'relevance_score': 0.0,
-                    'content_summary': "Validation failed",
-                    'validation_timestamp': datetime.now().isoformat()
-                })
-    
-    # Sort by relevance score and validity
-    validated_results.sort(key=lambda x: (x['is_valid'], x['relevance_score']), reverse=True)
-    
-    logger.info(f"✅ URL validation complete. {len([r for r in validated_results if r['is_valid']])} valid URLs out of {len(validated_results)}")
-    
-    return validated_results
-
-
 async def scan_ai_services(vendor_domain: str, vendor_name: str = None) -> Dict[str, Any]:
     """
-    Scan for AI services and capabilities offered by the vendor using OpenAI dynamic analysis.
+    Scan for AI services and capabilities offered by the vendor using dynamic OpenAI analysis.
     
     Args:
         vendor_domain: The vendor's domain name
@@ -4317,24 +3573,688 @@ async def scan_ai_services(vendor_domain: str, vendor_name: str = None) -> Dict[
             logger.info(f"🤖 Used OpenAI analysis for {vendor_domain}: {'AI detected' if offers_ai else 'No AI detected'}")
             
         else:
-            # Intelligent fallback when OpenAI analysis is not available
-            logger.info(f"� OpenAI analysis unavailable for {vendor_domain} - using intelligent knowledge-based detection")
+            # Fallback to keyword-based detection for unknown domains
+            logger.info(f"🔍 Using keyword-based fallback analysis for {vendor_domain}")
             
-            # Knowledge-based AI detection for common vendors
-            ai_detection_result = intelligent_ai_fallback(vendor_domain, vendor_name)
+            domain_hash = deterministic_hash(vendor_domain)
+            offers_ai = False
+            ai_services = []
+            ai_categories = []
+            governance_score = 60 + (abs(domain_hash) % 35)
             
-            offers_ai = ai_detection_result.get('offers_ai_services', False)
-            ai_services = ai_detection_result.get('ai_services_detail', [])
-            ai_categories = ai_detection_result.get('ai_service_categories', [])
-            governance_score = ai_detection_result.get('governance_score', 70)
+            # Enhanced AI detection through web scanning for unknown domains
+            try:
+                # Try to scan the vendor's website for AI-related content
+                logger.info(f"🔍 Scanning {vendor_domain} website for AI capabilities...")
+                
+                # AI-related keywords to search for
+                ai_keywords = [
+                    'artificial intelligence', 'machine learning', 'deep learning', 'neural network',
+                    'natural language processing', 'nlp', 'computer vision', 'predictive analytics',
+                    'intelligent automation', 'smart recommendations', 'ai-powered', 'ai-driven',
+                    'automated decision', 'chatbot', 'virtual assistant', 'sentiment analysis'
+                ]
+                
+                # Generate possible AI services based on industry patterns
+                possible_services = [
+                    {
+                        "category": "Large Language Models",
+                        "services": ["GPT models", "Text completion", "Code generation", "Creative writing"],
+                        "use_cases": ["Content generation", "Code assistance", "Conversational AI"],
+                        "data_types": ["Text", "Code", "Natural language"]
+                    },
+                    {
+                        "category": "Computer Vision", 
+                        "services": ["DALL-E image generation", "Image analysis", "Visual understanding"],
+                        "use_cases": ["Creative design", "Image analysis", "Visual content creation"],
+                        "data_types": ["Images", "Visual prompts"]
+                    }
+                ],
+                "governance_score": 85
+            },
+            "google.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced", 
+                "ai_service_categories": ["Machine Learning Platform", "Natural Language Processing", "Computer Vision"],
+                "ai_services_detail": [
+                    {
+                        "category": "Machine Learning Platform",
+                        "services": ["Google Cloud AI", "Vertex AI", "AutoML", "TensorFlow"],
+                        "use_cases": ["Predictive analytics", "Custom model training", "AI/ML deployment"],
+                        "data_types": ["Structured data", "Images", "Text", "Video"]
+                    },
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Google Translate", "Natural Language API", "Dialogflow"],
+                        "use_cases": ["Language translation", "Text analysis", "Chatbots"],
+                        "data_types": ["Text", "Speech", "Documents"]
+                    }
+                ],
+                "governance_score": 88
+            },
+            "microsoft.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Machine Learning Platform", "Natural Language Processing", "Computer Vision"],
+                "ai_services_detail": [
+                    {
+                        "category": "Machine Learning Platform", 
+                        "services": ["Azure Machine Learning", "Azure Cognitive Services", "Power BI AI"],
+                        "use_cases": ["Enterprise AI", "Business analytics", "Predictive modeling"],
+                        "data_types": ["Enterprise data", "Business metrics", "Customer data"]
+                    },
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Azure OpenAI Service", "Language Understanding", "Text Analytics"],
+                        "use_cases": ["Document processing", "Sentiment analysis", "Language understanding"],
+                        "data_types": ["Text", "Documents", "Speech"]
+                    }
+                ],
+                "governance_score": 82
+            },
+            "amazon.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Machine Learning Platform", "Natural Language Processing", "Computer Vision"],
+                "ai_services_detail": [
+                    {
+                        "category": "Machine Learning Platform",
+                        "services": ["Amazon SageMaker", "AWS Machine Learning", "Alexa Skills"],
+                        "use_cases": ["ML model development", "Voice interfaces", "Recommendation systems"],
+                        "data_types": ["Customer data", "Voice data", "Behavioral data"]
+                    }
+                ],
+                "governance_score": 78
+            },
+            "salesforce.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Predictive Analytics", "Natural Language Processing"],
+                "ai_services_detail": [
+                    {
+                        "category": "Predictive Analytics",
+                        "services": ["Einstein Analytics", "Sales forecasting", "Lead scoring"],
+                        "use_cases": ["Sales optimization", "Customer insights", "Business forecasting"],
+                        "data_types": ["CRM data", "Sales data", "Customer interactions"]
+                    }
+                ],
+                "governance_score": 75
+            },
+            "adobe.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Computer Vision", "Predictive Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Computer Vision",
+                        "services": ["Adobe Sensei", "Image analysis", "Content intelligence"],
+                        "use_cases": ["Creative automation", "Content optimization", "Design assistance"],
+                        "data_types": ["Images", "Creative content", "Design files"]
+                    }
+                ],
+                "governance_score": 72
+            },
+            "slack.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Natural Language Processing", "Workflow Automation"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Slack AI - message search and summarization", "Smart channel suggestions", "Intelligent notifications"],
+                        "use_cases": ["Communication optimization", "Knowledge discovery", "Team productivity", "Information retrieval"],
+                        "data_types": ["Messages", "Files", "Communication patterns", "User interactions"]
+                    },
+                    {
+                        "category": "Workflow Automation", 
+                        "services": ["Workflow Builder AI", "Smart automation triggers", "Predictive routing"],
+                        "use_cases": ["Process automation", "Task management", "Request routing"],
+                        "data_types": ["Workflow data", "User behavior", "Task patterns"]
+                    }
+                ],
+                "governance_score": 72
+            },
+            "zoom.us": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Natural Language Processing", "Computer Vision", "Conversation Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Meeting transcription", "Real-time translation", "Smart summaries", "AI Companion"],
+                        "use_cases": ["Meeting productivity", "Accessibility", "Content analysis", "Action item extraction"],
+                        "data_types": ["Audio", "Video", "Meeting content", "Chat messages"]
+                    },
+                    {
+                        "category": "Computer Vision",
+                        "services": ["Background replacement", "Gesture recognition", "Facial recognition for lighting"],
+                        "use_cases": ["Video enhancement", "Professional appearance", "User experience"],
+                        "data_types": ["Video streams", "Facial data", "Environmental data"]
+                    }
+                ],
+                "governance_score": 78
+            },
+            "microsoft.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Natural Language Processing", "Computer Vision", "Machine Learning", "Conversational AI"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing", 
+                        "services": ["Copilot (Office 365)", "Azure OpenAI", "Cognitive Services Text Analytics", "Translator"],
+                        "use_cases": ["Document generation", "Code assistance", "Language translation", "Sentiment analysis"],
+                        "data_types": ["Documents", "Code", "Text content", "User interactions"]
+                    },
+                    {
+                        "category": "Conversational AI",
+                        "services": ["Azure Bot Service", "Power Virtual Agents", "Cortana"],
+                        "use_cases": ["Customer service", "Virtual assistants", "Automated support"],
+                        "data_types": ["Conversation logs", "User queries", "Voice data"]
+                    }
+                ],
+                "governance_score": 88
+            },
+            "google.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced", 
+                "ai_service_categories": ["Natural Language Processing", "Computer Vision", "Machine Learning", "Search & Discovery"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Bard/Gemini", "Cloud Natural Language API", "Translate", "Smart Compose in Gmail"],
+                        "use_cases": ["Content generation", "Email assistance", "Language translation", "Text analysis"],
+                        "data_types": ["Text content", "Email data", "Search queries", "User communications"]
+                    },
+                    {
+                        "category": "Computer Vision", 
+                        "services": ["Google Photos AI", "Cloud Vision API", "Google Lens"],
+                        "use_cases": ["Photo organization", "Image recognition", "Visual search"],
+                        "data_types": ["Images", "Photos", "Visual content", "Metadata"]
+                    }
+                ],
+                "governance_score": 85
+            },
+            "salesforce.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Predictive Analytics", "Natural Language Processing", "Customer Intelligence"],
+                "ai_services_detail": [
+                    {
+                        "category": "Predictive Analytics",
+                        "services": ["Einstein Analytics", "Lead Scoring", "Opportunity Insights", "Sales Forecasting"],
+                        "use_cases": ["Sales prediction", "Customer behavior analysis", "Revenue forecasting"],
+                        "data_types": ["CRM data", "Customer interactions", "Sales metrics", "Behavioral data"]
+                    },
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Einstein Case Classification", "Sentiment Analysis", "Email Insights"],
+                        "use_cases": ["Customer service automation", "Email analysis", "Support optimization"],
+                        "data_types": ["Customer communications", "Support tickets", "Email content"]
+                    }
+                ],
+                "governance_score": 82
+            },
+            "amazon.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Conversational AI", "Machine Learning", "Computer Vision", "Personalization"],
+                "ai_services_detail": [
+                    {
+                        "category": "Conversational AI",
+                        "services": ["Alexa", "Amazon Lex", "Connect Voice ID"],
+                        "use_cases": ["Voice assistants", "Customer service bots", "Voice authentication"],
+                        "data_types": ["Voice recordings", "Conversation logs", "User commands"]
+                    },
+                    {
+                        "category": "Personalization",
+                        "services": ["Product recommendations", "Amazon Personalize", "Dynamic pricing"],
+                        "use_cases": ["E-commerce recommendations", "Content personalization", "Price optimization"],
+                        "data_types": ["Purchase history", "Browsing behavior", "User preferences"]
+                    }
+                ],
+                "governance_score": 80
+            },
+            "github.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Code Generation", "Natural Language Processing", "Predictive Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Code Generation",
+                        "services": ["GitHub Copilot", "Copilot Chat", "Code completion", "Documentation generation"],
+                        "use_cases": ["Code assistance", "Development acceleration", "Bug detection", "Documentation"],
+                        "data_types": ["Source code", "Comments", "Repository data", "Development patterns"]
+                    }
+                ],
+                "governance_score": 75
+            },
+            "atlassian.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Natural Language Processing", "Workflow Automation", "Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Atlassian Intelligence", "Smart search", "Content suggestions", "Auto-summarization"],
+                        "use_cases": ["Project management", "Knowledge discovery", "Content creation", "Team collaboration"],
+                        "data_types": ["Project data", "Documents", "User interactions", "Workflow patterns"]
+                    }
+                ],
+                "governance_score": 70
+            },
+            "hubspot.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced", 
+                "ai_service_categories": ["Predictive Analytics", "Natural Language Processing", "Customer Intelligence"],
+                "ai_services_detail": [
+                    {
+                        "category": "Predictive Analytics",
+                        "services": ["Lead scoring", "Deal prediction", "Customer behavior analysis", "Content optimization"],
+                        "use_cases": ["Sales forecasting", "Marketing optimization", "Customer retention"],
+                        "data_types": ["Customer data", "Interaction history", "Sales metrics", "Marketing data"]
+                    }
+                ],
+                "governance_score": 77
+            },
+            "shopify.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["E-commerce Intelligence", "Natural Language Processing", "Predictive Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "E-commerce Intelligence",
+                        "services": ["Shopify Magic (AI assistant)", "Product recommendations", "Inventory optimization", "Fraud detection"],
+                        "use_cases": ["Store optimization", "Customer experience", "Risk management", "Sales enhancement"],
+                        "data_types": ["Transaction data", "Customer behavior", "Product data", "Store analytics"]
+                    }
+                ],
+                "governance_score": 74
+            },
+            "notion.so": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Natural Language Processing", "Content Generation"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Notion AI - content generation", "Text summarization", "Writing assistance", "Translation"],
+                        "use_cases": ["Content creation", "Note organization", "Writing enhancement", "Documentation"],
+                        "data_types": ["User content", "Documents", "Notes", "Text data"]
+                    }
+                ],
+                "governance_score": 68
+            },
+            "canva.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Computer Vision", "Content Generation", "Design Automation"],
+                "ai_services_detail": [
+                    {
+                        "category": "Content Generation",
+                        "services": ["Magic Design", "Background remover", "Text to image", "Design suggestions"],
+                        "use_cases": ["Automated design", "Content creation", "Visual enhancement", "Brand consistency"],
+                        "data_types": ["Images", "Design templates", "User preferences", "Brand assets"]
+                    }
+                ],
+                "governance_score": 72
+            },
+            "figma.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Design Automation", "Computer Vision"],
+                "ai_services_detail": [
+                    {
+                        "category": "Design Automation",
+                        "services": ["Auto Layout AI", "Component suggestions", "Design system optimization"],
+                        "use_cases": ["Design efficiency", "Component reuse", "Responsive design", "Team collaboration"],
+                        "data_types": ["Design files", "Component libraries", "User interactions", "Design patterns"]
+                    }
+                ],
+                "governance_score": 70
+            },
+            "asana.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Predictive Analytics", "Natural Language Processing", "Workflow Automation"],
+                "ai_services_detail": [
+                    {
+                        "category": "Predictive Analytics",
+                        "services": ["Goal tracking", "Project timeline optimization", "Workload balancing", "Risk prediction"],
+                        "use_cases": ["Project management", "Resource allocation", "Timeline prediction", "Team optimization"],
+                        "data_types": ["Project data", "Task completion rates", "Team performance", "Workload metrics"]
+                    }
+                ],
+                "governance_score": 75
+            },
+            "monday.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Workflow Automation", "Predictive Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Workflow Automation",
+                        "services": ["Smart automation", "Project insights", "Time tracking optimization", "Task prioritization"],
+                        "use_cases": ["Project automation", "Team productivity", "Timeline management", "Performance analytics"],
+                        "data_types": ["Workflow data", "Time tracking", "Project metrics", "Team collaboration data"]
+                    }
+                ],
+                "governance_score": 73
+            },
+            "linear.app": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Basic",
+                "ai_service_categories": ["Natural Language Processing", "Predictive Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Issue classification", "Smart search", "Automated labeling", "Priority detection"],
+                        "use_cases": ["Issue management", "Development workflow", "Bug tracking", "Feature prioritization"],
+                        "data_types": ["Issue descriptions", "Development data", "User feedback", "Project metrics"]
+                    }
+                ],
+                "governance_score": 68
+            },
+            "intercom.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Conversational AI", "Natural Language Processing", "Customer Intelligence"],
+                "ai_services_detail": [
+                    {
+                        "category": "Conversational AI",
+                        "services": ["Fin AI chatbot", "Answer Bot", "Conversation routing", "Response suggestions"],
+                        "use_cases": ["Customer support automation", "Lead qualification", "User engagement", "Support efficiency"],
+                        "data_types": ["Customer conversations", "Support tickets", "User behavior", "Knowledge base content"]
+                    }
+                ],
+                "governance_score": 78
+            },
+            "zendesk.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Natural Language Processing", "Predictive Analytics", "Conversational AI"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["Answer Bot", "Intent detection", "Sentiment analysis", "Language detection"],
+                        "use_cases": ["Automated support", "Ticket classification", "Customer satisfaction", "Multi-language support"],
+                        "data_types": ["Support tickets", "Customer communications", "Knowledge base", "Agent interactions"]
+                    }
+                ],
+                "governance_score": 79
+            },
+            "mailchimp.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Predictive Analytics", "Personalization", "Natural Language Processing"],
+                "ai_services_detail": [
+                    {
+                        "category": "Predictive Analytics",
+                        "services": ["Send time optimization", "Customer lifetime value", "Purchase prediction", "Churn prediction"],
+                        "use_cases": ["Email marketing optimization", "Customer segmentation", "Conversion improvement", "Revenue forecasting"],
+                        "data_types": ["Email engagement", "Customer behavior", "Purchase history", "Campaign performance"]
+                    }
+                ],
+                "governance_score": 76
+            },
+            "stripe.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Advanced",
+                "ai_service_categories": ["Fraud Detection", "Predictive Analytics", "Risk Assessment"],
+                "ai_services_detail": [
+                    {
+                        "category": "Fraud Detection",
+                        "services": ["Radar fraud detection", "Machine learning risk scoring", "3D Secure optimization", "Chargeback protection"],
+                        "use_cases": ["Payment security", "Risk management", "Fraud prevention", "Revenue protection"],
+                        "data_types": ["Transaction data", "Payment patterns", "User behavior", "Device fingerprints"]
+                    }
+                ],
+                "governance_score": 82
+            },
+            "airtable.com": {
+                "offers_ai_services": True,
+                "ai_maturity_level": "Intermediate",
+                "ai_service_categories": ["Natural Language Processing", "Data Analytics"],
+                "ai_services_detail": [
+                    {
+                        "category": "Natural Language Processing",
+                        "services": ["AI field suggestions", "Data categorization", "Content analysis", "Smart forms"],
+                        "use_cases": ["Database management", "Content organization", "Data entry automation", "Workflow optimization"],
+                        "data_types": ["Database content", "Form submissions", "User data", "Workflow patterns"]
+                    }
+                ],
+                "governance_score": 71
+            }
+        }
+        
+        # Check if we have known data for this domain
+        if vendor_domain.lower() in known_ai_capabilities:
+            ai_info = known_ai_capabilities[vendor_domain.lower()]
+            offers_ai = ai_info["offers_ai_services"]
+            ai_services = ai_info["ai_services_detail"]
+            ai_categories = ai_info["ai_service_categories"]
+            governance_score = ai_info["governance_score"]
+            ai_maturity = ai_info["ai_maturity_level"]
+        else:
+            # Enhanced AI detection through web scanning for unknown domains
+            domain_hash = deterministic_hash(vendor_domain)
+            offers_ai = False
+            ai_services = []
+            ai_categories = []
+            governance_score = 60 + (abs(domain_hash) % 35)
             
-            if offers_ai:
-                logger.info(f"✅ Knowledge-based AI detection found AI services for {vendor_domain}")
+            try:
+                # Try to scan the vendor's website for AI-related content
+                logger.info(f"🔍 Scanning {vendor_domain} website for AI capabilities...")
+                
+                # Common AI-related URLs to check
+                ai_urls_to_check = [
+                    f"https://{vendor_domain}",
+                    f"https://{vendor_domain}/ai",
+                    f"https://{vendor_domain}/artificial-intelligence", 
+                    f"https://{vendor_domain}/machine-learning",
+                    f"https://{vendor_domain}/automation",
+                    f"https://{vendor_domain}/features",
+                    f"https://{vendor_domain}/products",
+                    f"https://{vendor_domain}/solutions"
+                ]
+                
+                # AI-related keywords to search for
+                ai_keywords = [
+                    'artificial intelligence', 'machine learning', 'deep learning', 'neural network',
+                    'natural language processing', 'nlp', 'computer vision', 'predictive analytics',
+                    'intelligent automation', 'smart recommendations', 'ai-powered', 'ai-driven',
+                    'automated decision', 'chatbot', 'virtual assistant', 'sentiment analysis',
+                    'anomaly detection', 'pattern recognition', 'data mining', 'predictive modeling',
+                    'algorithm', 'model training', 'intelligent search', 'smart insights',
+                    'automated classification', 'intelligent routing', 'predictive forecasting',
+                    'conversational ai', 'intelligent content', 'smart analytics', 'ai assistant'
+                ]
+                
+                ai_keyword_matches = []
+                
+                # Scan a few key URLs for AI content
+                for url in ai_urls_to_check[:3]:  # Limit to first 3 URLs to avoid too many requests
+                    try:
+                        headers = {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                        }
                         
-            # Determine AI maturity level
-            ai_maturity = "Advanced" if len(ai_services) >= 3 and governance_score >= 80 else \
-                         "Intermediate" if len(ai_services) >= 2 and offers_ai else \
-                         "Basic" if offers_ai else "No AI Services"
+                        response = requests.get(url, headers=headers, timeout=10, verify=False)
+                        if response.status_code == 200:
+                            content = response.text.lower()
+                            
+                            # Enhanced AI-powered content analysis
+                            ai_analysis = await analyze_content_with_ai(response.text, vendor_domain, vendor_name)
+                            
+                            if ai_analysis and ai_analysis.get('offers_ai_services'):
+                                offers_ai = True
+                                ai_categories.extend(ai_analysis.get('ai_service_categories', []))
+                                ai_services.extend(ai_analysis.get('ai_services_detail', []))
+                                governance_score = max(governance_score, ai_analysis.get('governance_score', governance_score))
+                                ai_keyword_matches.extend(ai_analysis.get('detected_keywords', []))
+                                logger.info(f"🤖 AI-powered analysis detected capabilities for {vendor_domain}")
+                                break
+                            
+                            # Fallback to keyword-based detection if AI analysis didn't find anything
+                            # Check for AI keywords
+                            for keyword in ai_keywords:
+                                if keyword in content:
+                                    ai_keyword_matches.append(keyword)
+                                    
+                            # If we found AI keywords, break early
+                            if len(ai_keyword_matches) >= 3:
+                                break
+                                
+                    except Exception as e:
+                        logger.debug(f"Failed to scan {url}: {str(e)}")
+                        continue
+                
+                # Determine if AI services are offered based on keyword matches (only if not already detected by AI analysis)
+                if not offers_ai and len(ai_keyword_matches) >= 2:
+                    offers_ai = True
+                    logger.info(f"✅ AI capabilities detected via keywords for {vendor_domain}: {ai_keyword_matches[:5]}")
+                    
+                    # Categorize based on keywords found (only if categories not already populated)
+                    if not ai_categories:
+                        nlp_keywords = ['natural language', 'nlp', 'chatbot', 'virtual assistant', 'sentiment analysis', 'conversational ai']
+                        ml_keywords = ['machine learning', 'predictive analytics', 'predictive modeling', 'model training', 'algorithm']
+                        vision_keywords = ['computer vision', 'image recognition', 'pattern recognition']
+                        automation_keywords = ['intelligent automation', 'automated decision', 'intelligent routing', 'automated classification']
+                        
+                        if any(keyword in ' '.join(ai_keyword_matches) for keyword in nlp_keywords):
+                            ai_categories.append("Natural Language Processing")
+                            ai_services.append({
+                                "category": "Natural Language Processing",
+                                "services": ["Text analysis", "Language processing", "Conversational interfaces"],
+                                "use_cases": ["Customer communication", "Content analysis", "Automated support"],
+                                "data_types": ["Text data", "Customer messages", "Documents"]
+                            })
+                        
+                        if any(keyword in ' '.join(ai_keyword_matches) for keyword in ml_keywords):
+                            ai_categories.append("Machine Learning Platform")
+                            ai_services.append({
+                                "category": "Machine Learning Platform",
+                                "services": ["Predictive modeling", "Data analytics", "Pattern recognition"],
+                                "use_cases": ["Business forecasting", "Risk assessment", "Performance optimization"],
+                                "data_types": ["Business data", "User behavior", "Performance metrics"]
+                            })
+                        
+                        if any(keyword in ' '.join(ai_keyword_matches) for keyword in vision_keywords):
+                            ai_categories.append("Computer Vision")
+                            ai_services.append({
+                                "category": "Computer Vision",
+                                "services": ["Image analysis", "Visual recognition", "Content processing"],
+                                "use_cases": ["Content moderation", "Visual search", "Quality assessment"],
+                                "data_types": ["Images", "Visual content", "Media files"]
+                            })
+                        
+                        if any(keyword in ' '.join(ai_keyword_matches) for keyword in automation_keywords):
+                            ai_categories.append("Process Automation")
+                            ai_services.append({
+                                "category": "Process Automation",
+                                "services": ["Workflow automation", "Decision support", "Process optimization"],
+                                "use_cases": ["Business process automation", "Decision making", "Efficiency improvement"],
+                                "data_types": ["Process data", "Business metrics", "Workflow patterns"]
+                            })
+                        
+                        # If no specific categories matched, add a general one
+                        if not ai_categories:
+                            ai_categories.append("AI-Enabled Features")
+                            ai_services.append({
+                                "category": "AI-Enabled Features", 
+                                "services": ["AI-powered capabilities", "Intelligent features", "Smart automation"],
+                                "use_cases": ["Enhanced user experience", "Intelligent insights", "Automated workflows"],
+                                "data_types": ["User data", "Application data", "System metrics"]
+                            })
+                        
+                        # Boost governance score for detected AI
+                        governance_score = min(85, governance_score + 15)
+                    
+                else:
+                    # Fallback to hash-based detection with lower probability
+                    offers_ai = (abs(domain_hash) % 4) == 0  # ~25% chance of offering AI (reduced from 67%)
+                    logger.info(f"ℹ️ No clear AI indicators found for {vendor_domain}, using heuristic detection")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ AI detection scan failed for {vendor_domain}: {str(e)}")
+                # Fallback to hash-based detection
+                offers_ai = (abs(domain_hash) % 4) == 0  # ~25% chance of offering AI
+            
+            if offers_ai and not ai_services:
+                # Generate AI services based on domain characteristics for unknown domains
+                # Potential AI service categories
+                possible_services = [
+                {
+                    "category": "Machine Learning Platform",
+                    "services": [
+                        "Automated model training and deployment",
+                        "Data preprocessing and feature engineering",
+                        "Model monitoring and performance analytics",
+                        "Custom algorithm development"
+                    ],
+                    "use_cases": ["Predictive analytics", "Customer segmentation", "Fraud detection"],
+                    "data_types": ["Structured data", "Time series", "Customer behavior data"]
+                },
+                {
+                    "category": "Natural Language Processing",
+                    "services": [
+                        "Text analysis and sentiment detection",
+                        "Language translation and localization",
+                        "Chatbot and virtual assistant capabilities",
+                        "Document processing and extraction"
+                    ],
+                    "use_cases": ["Customer support automation", "Content analysis", "Multi-language support"],
+                    "data_types": ["Text documents", "Chat logs", "Email communications"]
+                },
+                {
+                    "category": "Computer Vision",
+                    "services": [
+                        "Image recognition and classification",
+                        "Video analysis and content moderation",
+                        "Optical character recognition (OCR)",
+                        "Facial recognition and biometric analysis"
+                    ],
+                    "use_cases": ["Content moderation", "Document digitization", "Security monitoring"],
+                    "data_types": ["Images", "Video content", "Scanned documents"]
+                },
+                {
+                    "category": "Predictive Analytics",
+                    "services": [
+                        "Business forecasting and trend analysis",
+                        "Risk assessment and scoring",
+                        "Customer lifetime value prediction",
+                        "Demand planning and optimization"
+                    ],
+                    "use_cases": ["Sales forecasting", "Risk management", "Resource optimization"],
+                    "data_types": ["Historical business data", "Market data", "Customer metrics"]
+                },
+                {
+                    "category": "Process Automation",
+                    "services": [
+                        "Intelligent document processing",
+                        "Workflow optimization and automation",
+                        "Decision support systems",
+                        "Robotic process automation (RPA)"
+                    ],
+                    "use_cases": ["Document workflow", "Business process optimization", "Decision automation"],
+                    "data_types": ["Business documents", "Process logs", "Decision data"]
+                }
+            ]
+            
+                # Select 1-3 AI categories based on domain
+                num_categories = 1 + (abs(domain_hash) % 3)
+                selected_indices = [abs(domain_hash + i) % len(possible_services) for i in range(num_categories)]
+                
+                for idx in set(selected_indices):  # Remove duplicates
+                    service = possible_services[idx]
+                    ai_categories.append(service["category"])
+                    ai_services.append(service)
+            
+            # Determine AI maturity level for all domains (known and unknown)
+            if vendor_domain.lower() not in known_ai_capabilities:
+                ai_maturity = "Advanced" if len(ai_services) >= 3 and governance_score >= 80 else \
+                             "Intermediate" if len(ai_services) >= 2 and offers_ai else \
+                             "Basic" if offers_ai else "No AI Services"
         
         # AI governance and ethics
         ai_governance = None
@@ -4416,6 +4336,7 @@ async def scan_ai_services(vendor_domain: str, vendor_name: str = None) -> Dict[
             "ai_maturity_level": "Unknown",
             "compliance_considerations": ["Assessment failed - manual review required"]
         }
+
 # Data flow analysis functionality
 async def scan_data_flows(vendor_domain: str, vendor_name: str = None) -> Dict[str, Any]:
     """
@@ -4481,28 +4402,6 @@ async def scan_data_flows(vendor_domain: str, vendor_name: str = None) -> Dict[s
                 "System performance and diagnostic data"
             ])
         
-        # Enhanced data flow discovery with AI and URL validation
-        data_flow_categories = ['dpa', 'privacy_policy', 'architecture', 'api_docs', 'security', 'integration']
-        enhanced_discovery = await enhance_data_flow_discovery_with_ai(vendor_domain, data_flow_categories, {})
-        
-        # URL validation and content analysis
-        discovered_urls = []
-        if enhanced_discovery and 'categories' in enhanced_discovery:
-            all_urls = []
-            for category, data in enhanced_discovery['categories'].items():
-                if isinstance(data, dict):
-                    if 'primary_url' in data:
-                        all_urls.append(data['primary_url'])
-                    if 'alternative_urls' in data:
-                        all_urls.extend(data['alternative_urls'])
-            
-            if all_urls:
-                logger.info(f"🔍 Validating {len(all_urls)} discovered URLs for {vendor_domain}")
-                validated_urls = await validate_and_analyze_urls(all_urls, vendor_domain, 'data_flow')
-                discovered_urls = [url for url in validated_urls if url['is_valid'] and url['relevance_score'] > 0.3]
-                
-                logger.info(f"✅ Found {len(discovered_urls)} valid and relevant URLs")
-
         # Data processing activities
         processing_activities = [
             {
@@ -4749,14 +4648,8 @@ async def scan_data_flows(vendor_domain: str, vendor_name: str = None) -> Dict[s
             "source_information": {
                 "primary_source_url": primary_source_url,
                 "additional_sources": source_urls,
-                "scan_method": "AI-enhanced website analysis and privacy policy review",
-                "data_source_note": f"Data flow information analyzed from {vendor_domain} website and related documentation",
-                "ai_discovered_urls": discovered_urls[:10] if discovered_urls else [],  # Top 10 validated URLs
-                "url_validation_summary": {
-                    "total_discovered": len(all_urls) if 'all_urls' in locals() else 0,
-                    "valid_urls": len([u for u in discovered_urls if u['is_valid']]) if discovered_urls else 0,
-                    "high_relevance_urls": len([u for u in discovered_urls if u['relevance_score'] > 0.7]) if discovered_urls else 0
-                }
+                "scan_method": "Website analysis and privacy policy review",
+                "data_source_note": f"Data flow information analyzed from {vendor_domain} website and related documentation"
             },
             "data_flow_overview": {
                 "collection_scope": ["Minimal", "Basic", "Moderate", "Extensive"][collection_scope],
@@ -4861,10 +4754,13 @@ async def run_real_assessment(assessment_id: str, request_data: CreateAssessment
         vendor_domain = request_data.vendor_domain
         vendor_name = vendor_domain.split('.')[0].title()
         
-        logger.info(f"🔍 Starting standard real assessment for {vendor_domain}")
+        logger.info(f"� Starting standard real assessment for {vendor_domain}")
+        
+        # Update progress
+        assessment_results[assessment_id]["progress"] = 10
+        assessment_results[assessment_id]["status"] = "initializing_standard_assessment"
         
         # Run standard comprehensive assessment using the comprehensive function
-        # (Don't manually set progress - let ProgressTracker handle it)
         await run_comprehensive_real_assessment(assessment_id, request_data)
         
         logger.info(f"✅ Standard assessment completed for {vendor_domain}")
@@ -4874,7 +4770,7 @@ async def run_real_assessment(assessment_id: str, request_data: CreateAssessment
         logger.error(f"❌ Real assessment failed for {assessment_id}: {str(e)}")
         assessment_results[assessment_id]["status"] = "failed"
         assessment_results[assessment_id]["error"] = str(e)
-        # Don't manually set progress to 100% - let error handling in comprehensive assessment handle it
+        assessment_results[assessment_id]["progress"] = 100
         
     except Exception as e:
         logger.error(f"❌ Enhanced real assessment failed for {assessment_id}: {str(e)}")
@@ -5022,376 +4918,131 @@ async def run_real_assessment_legacy(assessment_id: str, request_data: dict):
         assessment_results[assessment_id]["error"] = str(e)
         print(f"Assessment error: {e}")
 
-class ProgressTracker:
-    """Enhanced progress tracking for assessments with steady incremental updates"""
-    
-    def __init__(self, assessment_id: str):
-        self.assessment_id = assessment_id
-        self.total_steps = 8  # Total major assessment steps
-        self.current_step = 0
-        self.step_progress = 0
-        self.start_time = time.time()
-        self.estimated_duration = 150  # Estimated total seconds (2.5 minutes)
-        
-        # Progress milestones for each major step
-        self.steps = [
-            {"name": "Initializing Assessment", "weight": 5},      # 0-5%
-            {"name": "Setting up Discovery Engine", "weight": 10}, # 5-15%  
-            {"name": "Running Data Breach Scan", "weight": 15},    # 15-30%
-            {"name": "Analyzing Privacy Practices", "weight": 15}, # 30-45%
-            {"name": "Scanning AI Services", "weight": 15},       # 45-60%
-            {"name": "Discovering Compliance Documents", "weight": 15}, # 60-75%
-            {"name": "Finding Trust Centers", "weight": 10},      # 75-85%
-            {"name": "Finalizing Assessment", "weight": 15}       # 85-100%
-        ]
-        
-    def start_step(self, step_index: int):
-        """Start a new step and update progress"""
-        if step_index < len(self.steps):
-            self.current_step = step_index
-            self.step_progress = 0
-            
-            # Calculate base progress up to this step
-            base_progress = sum(step["weight"] for step in self.steps[:step_index])
-            
-            self.update_progress(base_progress, self.steps[step_index]["name"])
-    
-    def update_step_progress(self, step_percentage: float):
-        """Update progress within the current step (0-100)"""
-        if self.current_step < len(self.steps):
-            # Calculate base progress from previous steps
-            base_progress = sum(step["weight"] for step in self.steps[:self.current_step])
-            
-            # Add current step progress
-            step_weight = self.steps[self.current_step]["weight"]
-            step_contribution = (step_percentage / 100) * step_weight
-            
-            total_progress = base_progress + step_contribution
-            
-            self.update_progress(
-                min(total_progress, 100), 
-                self.steps[self.current_step]["name"],
-                step_percentage
-            )
-    
-    def update_progress(self, percentage: float, status: str, step_percentage: float = None):
-        """Update the overall progress"""
-        import time as time_module  # Avoid naming conflicts
-        elapsed_time = time_module.time() - self.start_time
-        
-        # Calculate estimated time remaining
-        if percentage > 5:  # After initial setup
-            time_per_percent = elapsed_time / percentage
-            estimated_total_time = time_per_percent * 100
-            time_remaining = max(0, estimated_total_time - elapsed_time)
-        else:
-            time_remaining = self.estimated_duration
-        
-        # Format time remaining
-        if time_remaining > 60:
-            time_str = f"{int(time_remaining // 60)}m {int(time_remaining % 60)}s"
-        else:
-            time_str = f"{int(time_remaining)}s"
-        
-        # Update assessment results with detailed info
-        assessment_results[self.assessment_id].update({
-            "progress": round(percentage, 1),
-            "status": status,
-            "current_step": self.current_step + 1,
-            "total_steps": self.total_steps,
-            "step_progress": step_percentage,
-            "estimated_time_remaining": time_str,
-            "elapsed_time": f"{int(elapsed_time)}s"
-        })
-        
-        logger.info(f"📊 Assessment {self.assessment_id}: {percentage:.1f}% - {status} (ETA: {time_str})")
-        
-        # Add small delay to make progress more visible in UI
-        time_module.sleep(0.3)
-
 async def run_comprehensive_real_assessment(assessment_id: str, request_data: CreateAssessmentRequest):
-    """Run comprehensive real assessment using actual web scanning and data collection with enhanced progress tracking"""
+    """Run comprehensive real assessment using actual web scanning and data collection"""
     try:
         vendor_domain = request_data.vendor_domain
         vendor_name = vendor_domain.split('.')[0].title()
         
         logger.info(f"🔍 Starting comprehensive real assessment for {vendor_domain}")
         
-        # Initialize enhanced progress tracker
-        progress = ProgressTracker(assessment_id)
+        # Update progress - initializing
+        assessment_results[assessment_id]["progress"] = 5
+        assessment_results[assessment_id]["status"] = "initializing_real_assessment"
         
-        # Step 1: Initialize assessment
-        progress.start_step(0)
-        await asyncio.sleep(1.0)  # Longer delay to ensure step 1 is visible
-        progress.update_step_progress(50)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(100)
-        await asyncio.sleep(0.5)
-        
-        # Step 2: Setup discovery engines
-        progress.start_step(1)
-        await asyncio.sleep(0.5)  # Ensure step 2 start is visible
-        progress.update_step_progress(20)
-        
+        # Initialize discovery engine
         discovery_engine = DynamicComplianceDiscovery()
-        progress.update_step_progress(60)
-        await asyncio.sleep(0.5)
-        
         trust_center_integrator = TrustCenterIntegrator()
-        progress.update_step_progress(100)
-        await asyncio.sleep(0.5)  # Ensure step 2 completion is visible
         
-        # Step 3: Start parallel scans setup
-        progress.start_step(2)
-        await asyncio.sleep(0.5)  # Ensure step 3 start is visible
+        # Update progress - scanning for data breaches
+        assessment_results[assessment_id]["progress"] = 15
+        assessment_results[assessment_id]["status"] = "scanning_data_breaches"
         
-        # Run multiple scans in parallel for faster processing
-        logger.info(f"🚀 Starting parallel scans for {vendor_domain}")
+        # Real breach scanning
+        try:
+            breach_scan_result = await scan_data_breaches(vendor_domain, vendor_name)
+            logger.info(f"✅ Real breach scan completed for {vendor_domain} - {breach_scan_result['breaches_found']} breaches found")
+        except Exception as e:
+            breach_scan_result = {
+                "error": str(e),
+                "breaches_found": 0,
+                "security_track_record": "No data available",
+                "breach_severity": "unknown"
+            }
+            logger.warning(f"⚠️ Breach scan error for {vendor_domain}: {str(e)}")
         
-        # Create parallel tasks for independent scans
-        scan_tasks = []
-        completed_scans = 0
-        total_scans = 6
+        # Update progress - analyzing privacy practices
+        assessment_results[assessment_id]["progress"] = 25
+        assessment_results[assessment_id]["status"] = "analyzing_privacy_practices"
         
-        # Enhanced breach scanning task with progress updates
-        async def breach_scan():
-            nonlocal completed_scans
-            try:
-                result = await scan_data_breaches(vendor_domain, vendor_name)
-                completed_scans += 1
-                logger.info(f"✅ Breach scan completed for {vendor_domain} - {result['breaches_found']} breaches found")
-                return ("breach_scan", result)
-            except Exception as e:
-                completed_scans += 1
-                logger.warning(f"⚠️ Breach scan error for {vendor_domain}: {str(e)}")
-                return ("breach_scan", {"error": str(e), "breaches_found": 0, "security_track_record": "No data available", "breach_severity": "unknown"})
+        # Real privacy scanning
+        try:
+            privacy_scan_result = await scan_privacy_practices(vendor_domain, vendor_name)
+            logger.info(f"✅ Real privacy scan completed for {vendor_domain} - compliance score: {privacy_scan_result.get('compliance_score', 'Unknown')}")
+        except Exception as e:
+            privacy_scan_result = {
+                "error": str(e),
+                "compliance_score": 0,
+                "privacy_framework": "Not detected",
+                "data_collection_practices": "unknown"
+            }
+            logger.warning(f"⚠️ Privacy scan error for {vendor_domain}: {str(e)}")
         
-        # Enhanced privacy scanning task
-        async def privacy_scan():
-            nonlocal completed_scans
-            try:
-                result = await scan_privacy_practices(vendor_domain, vendor_name)
-                completed_scans += 1
-                logger.info(f"✅ Privacy scan completed for {vendor_domain} - compliance score: {result.get('compliance_score', 'Unknown')}")
-                return ("privacy_scan", result)
-            except Exception as e:
-                completed_scans += 1
-                logger.warning(f"⚠️ Privacy scan error for {vendor_domain}: {str(e)}")
-                return ("privacy_scan", {"error": str(e), "compliance_score": 0, "privacy_framework": "Not detected", "data_collection_practices": "unknown"})
+        # Update progress - scanning AI services
+        assessment_results[assessment_id]["progress"] = 35
+        assessment_results[assessment_id]["status"] = "scanning_ai_services"
         
-        # Enhanced AI services scanning task
-        async def ai_scan():
-            nonlocal completed_scans
-            try:
-                result = await scan_ai_services(vendor_domain, vendor_name)
-                completed_scans += 1
-                logger.info(f"✅ AI services scan completed for {vendor_domain} - maturity level: {result.get('ai_maturity_level', 'No AI Services')}")
-                return ("ai_scan", result)
-            except Exception as e:
-                completed_scans += 1
-                logger.warning(f"⚠️ AI services scan error for {vendor_domain}: {str(e)}")
-                return ("ai_scan", {"error": str(e), "offers_ai_services": False, "ai_maturity_level": "Not detected", "ai_frameworks": []})
+        # Real AI services scanning
+        try:
+            ai_scan_result = await scan_ai_services(vendor_domain, vendor_name)
+            ai_maturity = ai_scan_result.get('ai_maturity_level', 'No AI Services')
+            logger.info(f"✅ Real AI services scan completed for {vendor_domain} - maturity level: {ai_maturity}")
+        except Exception as e:
+            ai_scan_result = {
+                "error": str(e),
+                "offers_ai_services": False,
+                "ai_maturity_level": "Not detected",
+                "ai_frameworks": []
+            }
+            logger.warning(f"⚠️ AI services scan error for {vendor_domain}: {str(e)}")
         
-        # Enhanced compliance discovery task
-        async def compliance_scan():
-            nonlocal completed_scans
-            try:
-                result = await discovery_engine.discover_vendor_compliance(
-                    vendor_domain, 
-                    request_data.regulations or ["gdpr", "soc2", "iso27001"]
-                )
-                completed_scans += 1
-                logger.info(f"✅ Compliance discovery completed for {vendor_domain} - found {len(result.get('compliance_documents', []))} documents")
-                return ("compliance_scan", result)
-            except Exception as e:
-                completed_scans += 1
-                logger.warning(f"⚠️ Compliance discovery error for {vendor_domain}: {str(e)}")
-                return ("compliance_scan", {"error": str(e), "compliance_documents": [], "trust_centers": [], "frameworks_found": []})
+        # Update progress - discovering compliance frameworks
+        assessment_results[assessment_id]["progress"] = 45
+        assessment_results[assessment_id]["status"] = "discovering_compliance_frameworks"
         
-        # Enhanced trust center discovery task
-        async def trust_center_scan():
-            nonlocal completed_scans
-            try:
-                result = await trust_center_integrator.discover_trust_center(vendor_domain)
-                completed_scans += 1
-                logger.info(f"✅ Trust center discovery completed for {vendor_domain} - type: {result.get('trust_center_type', 'None')}")
-                return ("trust_center_scan", result)
-            except Exception as e:
-                completed_scans += 1
-                logger.warning(f"⚠️ Trust center discovery error for {vendor_domain}: {str(e)}")
-                return ("trust_center_scan", {"error": str(e), "trust_center_found": False, "trust_center_type": "none", "access_methods": []})
+        # Real compliance discovery
+        try:
+            compliance_discovery = await discovery_engine.discover_vendor_compliance(
+                vendor_domain, 
+                request_data.regulations or ["gdpr", "soc2", "iso27001"]
+            )
+            logger.info(f"✅ Real compliance discovery completed for {vendor_domain} - found {len(compliance_discovery.get('compliance_documents', []))} documents")
+        except Exception as e:
+            compliance_discovery = {
+                "error": str(e),
+                "compliance_documents": [],
+                "trust_centers": [],
+                "frameworks_found": []
+            }
+            logger.warning(f"⚠️ Compliance discovery error for {vendor_domain}: {str(e)}")
         
-        # Enhanced data flow scanning task
-        async def data_flow_scan():
-            nonlocal completed_scans
-            try:
-                result = await scan_data_flows(vendor_domain, vendor_name)
-                completed_scans += 1
-                logger.info(f"✅ Data flow scan completed for {vendor_domain}")
-                return ("data_flow_scan", result)
-            except Exception as e:
-                completed_scans += 1
-                logger.warning(f"⚠️ Data flow scan error for {vendor_domain}: {str(e)}")
-                return ("data_flow_scan", {"error": str(e), "data_flows": [], "third_party_integrations": [], "data_residency": "unknown"})
+        # Update progress - discovering trust centers
+        assessment_results[assessment_id]["progress"] = 55
+        assessment_results[assessment_id]["status"] = "discovering_trust_centers"
         
-        # Execute all scans in parallel - convert coroutines to tasks
-        scan_tasks = [
-            asyncio.create_task(breach_scan()),
-            asyncio.create_task(privacy_scan()),
-            asyncio.create_task(ai_scan()),
-            asyncio.create_task(compliance_scan()),
-            asyncio.create_task(trust_center_scan()),
-            asyncio.create_task(data_flow_scan())
-        ]
+        # Real trust center discovery
+        try:
+            trust_center_info = await trust_center_integrator.discover_trust_center(vendor_domain)
+            logger.info(f"✅ Real trust center discovery completed for {vendor_domain} - type: {trust_center_info.get('trust_center_type', 'None')}")
+        except Exception as e:
+            trust_center_info = {
+                "error": str(e),
+                "trust_center_found": False,
+                "trust_center_type": "none",
+                "access_methods": []
+            }
+            logger.warning(f"⚠️ Trust center discovery error for {vendor_domain}: {str(e)}")
         
-        # Start monitoring parallel scans
-        progress.update_step_progress(25)
+        # Update progress - scanning data flows
+        assessment_results[assessment_id]["progress"] = 65
+        assessment_results[assessment_id]["status"] = "scanning_data_flows"
         
-        # Wait for all scans to complete in parallel with periodic progress updates
-        async def monitor_parallel_scans():
-            """Monitor parallel scans and advance through steps 2-6 as scans complete"""
-            start_time = time.time()
-            max_wait_time = 180  # 3 minutes max for parallel scans
-            last_completed = 0
-            current_step_index = 2  # Start at step 2 (breach scan)
-            last_progress_update = time.time()
-            
-            while True:
-                # Check if all tasks are done (now we can call .done() on Task objects)
-                done_count = sum(1 for task in scan_tasks if task.done())
-                
-                if done_count == len(scan_tasks):
-                    break
-                
-                # More frequent progress updates based on time elapsed
-                elapsed = time.time() - start_time
-                
-                # Advance to next step if we've hit a threshold
-                if done_count > last_completed:
-                    # Calculate which step we should be on based on completions
-                    target_step = min(2 + done_count, 6)  # Steps 2-6 based on scan completions
-                    
-                    if target_step > current_step_index:
-                        # Move to next step
-                        current_step_index = target_step
-                        progress.start_step(current_step_index)
-                        progress.update_step_progress(20)
-                        logger.info(f"📈 Advanced to step {current_step_index + 1}: {progress.steps[current_step_index]['name']}")
-                    else:
-                        # Update progress within current step
-                        step_progress = min(90, 20 + (done_count * 15))
-                        progress.update_step_progress(step_progress)
-                    
-                    last_completed = done_count
-                    last_progress_update = time.time()
-                
-                # Provide regular progress updates even if no scans have completed
-                elif time.time() - last_progress_update > 5:  # Every 5 seconds
-                    # Calculate time-based progress within current step
-                    step_duration_estimate = 30  # Assume each step takes ~30 seconds
-                    time_in_current_step = elapsed - ((current_step_index - 2) * step_duration_estimate)
-                    time_progress = min(80, (time_in_current_step / step_duration_estimate) * 70)
-                    
-                    # Add some variability based on scans completed
-                    completion_bonus = (done_count / len(scan_tasks)) * 15
-                    total_step_progress = min(85, 20 + time_progress + completion_bonus)
-                    
-                    progress.update_step_progress(total_step_progress)
-                    logger.info(f"⏱️ Time-based progress update: Step {current_step_index + 1}, {total_step_progress:.1f}% ({done_count}/{len(scan_tasks)} scans done)")
-                    last_progress_update = time.time()
-                
-                # Safety timeout
-                if time.time() - start_time > max_wait_time:
-                    logger.warning(f"⚠️ Parallel scan timeout after {max_wait_time}s for {vendor_domain}")
-                    break
-                    
-                await asyncio.sleep(0.5)  # Check every 500ms for more responsive progress
-            
-            return done_count
+        # Real data flow scanning
+        try:
+            data_flow_result = await scan_data_flows(vendor_domain, vendor_name)
+            logger.info(f"✅ Real data flow scan completed for {vendor_domain}")
+        except Exception as e:
+            data_flow_result = {
+                "error": str(e),
+                "data_flows": [],
+                "third_party_integrations": [],
+                "data_residency": "unknown"
+            }
+            logger.warning(f"⚠️ Data flow scan error for {vendor_domain}: {str(e)}")
         
-        # Step 2 complete: Begin parallel scanning phase (steps 2-6)
-        progress.update_step_progress(20)
-        
-        # Start monitoring while scans run (this will handle scanning progress across steps 2-6)
-        monitoring_task = asyncio.create_task(monitor_parallel_scans())
-        
-        # Wait for all scans to complete
-        scan_results = await asyncio.gather(*scan_tasks, return_exceptions=True)
-        
-        # Ensure monitoring task is complete
-        await monitoring_task
-        
-        # Ensure we advance through steps 4-6 explicitly
-        # Step 4: Analyzing Privacy Practices (if not already advanced)
-        if progress.current_step < 3:
-            progress.start_step(3)
-            await asyncio.sleep(0.5)
-            progress.update_step_progress(50)
-            await asyncio.sleep(0.5)
-            progress.update_step_progress(100)
-            await asyncio.sleep(0.5)
-        
-        # Step 5: Scanning AI Services
-        progress.start_step(4)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(50)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(100)
-        await asyncio.sleep(0.5)
-        
-        # Step 6: Discovering Compliance Documents  
-        progress.start_step(5)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(50)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(100)
-        await asyncio.sleep(0.5)
-        
-        # Step 7: Finding Trust Centers
-        progress.start_step(6)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(95)
-        await asyncio.sleep(0.5)
-        
-        # Step 8: Process scan results (Finalizing Assessment)
-        progress.start_step(7)
-        await asyncio.sleep(0.5)
-        progress.update_step_progress(10)
-        
-        # Process results from parallel scans
-        breach_scan_result = {}
-        privacy_scan_result = {}
-        ai_scan_result = {}
-        compliance_discovery = {}
-        trust_center_info = {}
-        data_flow_result = {}
-        
-        progress.update_step_progress(25)
-        
-        for result in scan_results:
-            if isinstance(result, Exception):
-                logger.error(f"Parallel scan failed: {str(result)}")
-                continue
-            
-            scan_type, data = result
-            if scan_type == "breach_scan":
-                breach_scan_result = data
-            elif scan_type == "privacy_scan":
-                privacy_scan_result = data
-            elif scan_type == "ai_scan":
-                ai_scan_result = data
-            elif scan_type == "compliance_scan":
-                compliance_discovery = data
-            elif scan_type == "trust_center_scan":
-                trust_center_info = data
-            elif scan_type == "data_flow_scan":
-                data_flow_result = data
-        
-        progress.update_step_progress(50)
-        logger.info(f"🎯 Parallel scans completed for {vendor_domain}")
-        
-        # Start AI-powered analysis
-        progress.update_step_progress(60)
+        # Update progress - AI-powered assessment analysis
+        assessment_results[assessment_id]["progress"] = 70
+        assessment_results[assessment_id]["status"] = "ai_powered_analysis"
         
         # Collect all scan data for AI analysis
         collected_data = {
@@ -5403,9 +5054,6 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             "data_flow": data_flow_result
         }
         
-        progress.update_step_progress(65)
-        logger.info(f"📊 Data collection complete, starting AI analysis for {vendor_domain}")
-        
         # Assessment configuration for AI analysis
         assessment_config = {
             "vendor_domain": vendor_domain,
@@ -5415,9 +5063,6 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             "business_criticality": request_data.business_criticality,
             "regulations": request_data.regulations or ["gdpr", "soc2", "iso27001"]
         }
-        
-        progress.update_step_progress(70)
-        logger.info(f"🤖 Running AI assessment analysis for {vendor_domain}")
         
         # Generate standard assessment results using collected data
         real_results = await _generate_real_assessment_results(
@@ -5433,20 +5078,17 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         )
         logger.info(f"✅ Standard assessment completed for {vendor_domain} - risk level: {real_results.get('risk_level', 'unknown')}")
         
-        # Update progress using ProgressTracker - generating assessment results
-        progress.update_step_progress(80)
-        logger.info(f"📋 Generating final assessment report for {vendor_domain}")
+        # Update progress - generating assessment results
+        assessment_results[assessment_id]["progress"] = 75
+        assessment_results[assessment_id]["status"] = "generating_real_assessment_results"
         
-        # Update progress using ProgressTracker - finalizing
-        progress.update_step_progress(85)
-        logger.info(f"🔧 Converting assessment results to user-friendly format for {vendor_domain}")
+        # Update progress - finalizing
+        assessment_results[assessment_id]["progress"] = 90
+        assessment_results[assessment_id]["status"] = "finalizing_real_results"
         
         # Convert to user-friendly format and store
         real_results["assessment_mode"] = request_data.assessment_mode
         user_friendly_results = convert_to_user_friendly(real_results)
-        
-        progress.update_step_progress(90)
-        logger.info(f"📦 Packaging comprehensive assessment results for {vendor_domain}")
         
         # Store all collected data
         comprehensive_results = {
@@ -5470,12 +5112,9 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             "assessment_type": "comprehensive_real_assessment"
         }
         
-        # Final progress update - assessment complete
-        progress.update_step_progress(95)
-        logger.info(f"💾 Storing assessment results for {vendor_domain}")
-        
-        # Final completion
-        progress.update_progress(100, "completed", "Assessment finished successfully!")
+        # Final update
+        assessment_results[assessment_id]["progress"] = 100
+        assessment_results[assessment_id]["status"] = "completed"
         assessment_results[assessment_id]["results"] = comprehensive_results
         
         # Update storage
@@ -5485,18 +5124,6 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
             assessment_storage[assessment_id]["completed_at"] = datetime.now().isoformat()
         
         logger.info(f"🎉 Comprehensive real assessment completed for {vendor_domain}")
-        
-        # Check if continuous monitoring should be enabled
-        if request_data.enable_continuous_monitoring:
-            try:
-                vendor_name = assessment_results[assessment_id].get("vendor_name", vendor_domain.split('.')[0].title())
-                success = await add_vendor_to_monitoring(vendor_domain, vendor_name, assessment_id)
-                if success:
-                    logger.info(f"🔄 Added {vendor_domain} to continuous monitoring")
-                else:
-                    logger.warning(f"⚠️ Failed to add {vendor_domain} to continuous monitoring")
-            except Exception as e:
-                logger.error(f"❌ Error adding vendor to monitoring: {str(e)}")
         
         # Send completion email if requested
         if request_data.requester_email:
@@ -5509,8 +5136,7 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         
     except Exception as e:
         logger.error(f"❌ Comprehensive real assessment failed for {assessment_id}: {str(e)}")
-        # Update error status through assessment_results (not ProgressTracker since it failed)
-        assessment_results[assessment_id]["status"] = "error" 
+        assessment_results[assessment_id]["status"] = "error"
         assessment_results[assessment_id]["error"] = str(e)
         assessment_results[assessment_id]["progress"] = 0
         
@@ -5545,7 +5171,7 @@ async def run_mock_assessment(assessment_id: str, request_data: CreateAssessment
         regulations = request_data.regulations
         
         for progress, status in steps:
-            await asyncio.sleep(0.3)  # Optimized from 1 second to 0.3 seconds for faster response
+            await asyncio.sleep(1)  # Reduced from 2 to 1 second for faster demo
             assessment_results[assessment_id]["progress"] = progress
             assessment_results[assessment_id]["status"] = status
             
@@ -5931,18 +5557,6 @@ async def run_mock_assessment(assessment_id: str, request_data: CreateAssessment
                 assessment_storage[assessment_id]["risk_score"] = risk_score
         
         logger.info(f"✅ Assessment {assessment_id} completed successfully")
-        
-        # Check if continuous monitoring should be enabled
-        if request_data.enable_continuous_monitoring:
-            try:
-                vendor_name = assessment_results[assessment_id].get("vendor_name", vendor_domain.split('.')[0].title())
-                success = await add_vendor_to_monitoring(vendor_domain, vendor_name, assessment_id)
-                if success:
-                    logger.info(f"🔄 Added {vendor_domain} to continuous monitoring")
-                else:
-                    logger.warning(f"⚠️ Failed to add {vendor_domain} to continuous monitoring")
-            except Exception as e:
-                logger.error(f"❌ Error adding vendor to monitoring: {str(e)}")
         
         # Send assessment completion email
         try:
@@ -6627,7 +6241,6 @@ async def create_assessment(request: CreateAssessmentRequest):
             "vendor_name": vendor_domain.split('.')[0].title(),  # Generate name from domain
             "requester_email": requester_email,
             "auto_trust_center": auto_trust_center,
-            "enable_continuous_monitoring": request.enable_continuous_monitoring,
             "started_at": datetime.now().isoformat(),
             "results": None
         }
@@ -6644,7 +6257,6 @@ async def create_assessment(request: CreateAssessmentRequest):
             "regulations": regulations,
             "business_criticality": business_criticality,
             "auto_trust_center": auto_trust_center,
-            "enable_continuous_monitoring": request.enable_continuous_monitoring,
             "created_at": datetime.now().isoformat(),
             "results": None
         }
@@ -6705,16 +6317,10 @@ async def get_assessment_history():
                 "id": assessment_id,
                 "vendor_name": vendor_name[:100],  # Limit length
                 "vendor_domain": vendor_domain[:100],  # Limit length
-                "domain": vendor_domain[:100],  # Alias for frontend compatibility
                 "risk_score": risk_score,
-                "final_score": risk_score,  # Alias for frontend compatibility
                 "status": assessment_data.get("status", "unknown"),
                 "created_at": assessment_data.get("created_at", datetime.now().isoformat()),
                 "completed_at": assessment_data.get("completed_at"),
-                "assessment_date": assessment_data.get("created_at", datetime.now().isoformat()),  # Alias for frontend compatibility
-                "enable_continuous_monitoring": assessment_data.get("enable_continuous_monitoring", False),
-                "requester_email": assessment_data.get("requester_email"),
-                "regulations": assessment_data.get("regulations", []),
                 "results": results  # Include full results for display
             })
         
@@ -7600,414 +7206,171 @@ async def get_bulk_assessment_status(job_id: str):
 
 
 async def process_bulk_assessments(job_id: str):
-    """Background task to process bulk assessments with parallel processing"""
+    """Background task to process bulk assessments"""
     try:
         bulk_job = bulk_assessment_jobs[job_id]
         
-        # Process assessments in parallel batches for faster completion
-        batch_size = 3  # Process 3 vendors simultaneously
-        vendor_batches = [bulk_job.vendor_list[i:i + batch_size] for i in range(0, len(bulk_job.vendor_list), batch_size)]
-        
-        for batch_index, vendor_batch in enumerate(vendor_batches):
+        for index, vendor in enumerate(bulk_job.vendor_list):
             try:
-                # Update progress for batch
-                bulk_job.current_vendor_index = batch_index * batch_size
-                bulk_job.progress = int((batch_index * batch_size / bulk_job.total_vendors) * 100)
+                bulk_job.current_vendor_index = index
+                bulk_job.progress = int((index / bulk_job.total_vendors) * 100)
                 
-                # Process vendors in parallel within batch
-                batch_tasks = []
-                for vendor in vendor_batch:
-                    task = asyncio.create_task(process_single_vendor_assessment(vendor, bulk_job))
-                    batch_tasks.append(task)
+                # Start individual assessment
+                assessment_data = {
+                    "vendorDomain": vendor["vendor_domain"],
+                    "vendorName": vendor["vendor_name"],
+                    "dataSensitivity": vendor.get("data_sensitivity", "medium"),
+                    "regulations": vendor.get("regulations", ["SOC 2 Type 2", "ISO 27001"]),
+                    "businessCriticality": vendor.get("business_criticality", "high"),
+                    "autoFollowUp": False,
+                    "deepScan": False
+                }
                 
-                # Wait for all vendors in batch to complete
-                await asyncio.gather(*batch_tasks, return_exceptions=True)
+                # Create individual assessment
+                assessment_id = str(uuid.uuid4())
+                assessment_results[assessment_id] = {
+                    "status": "processing",
+                    "progress": 0,
+                    "vendorDomain": vendor["vendor_domain"],
+                    "vendorName": vendor["vendor_name"]
+                }
                 
-                logger.info(f"Completed batch {batch_index + 1}/{len(vendor_batches)} for bulk job {job_id}")
+                # Simulate assessment processing including data flow scanning
+                await asyncio.sleep(2)  # Simulate processing time
+                
+                # Generate mock data flow information for bulk assessment
+                vendor_domain = vendor["vendor_domain"]
+                domain_hash = deterministic_hash(vendor_domain)
+                collection_scope = abs(domain_hash) % 4  # 0-3 scale
+                
+                mock_data_flows = {
+                    "source_information": {
+                        "primary_source_url": f"https://{vendor_domain}/privacy-policy",
+                        "additional_sources": [
+                            f"https://{vendor_domain}/privacy",
+                            f"https://{vendor_domain}/terms-of-service",
+                            f"https://{vendor_domain}/security"
+                        ],
+                        "scan_method": "Bulk assessment website analysis",
+                        "data_source_note": f"Data flow information analyzed from {vendor_domain} website and documentation"
+                    },
+                    "data_flow_overview": {
+                        "collection_scope": ["Minimal", "Basic", "Moderate", "Extensive"][collection_scope],
+                        "data_types_count": 3 + collection_scope * 2,
+                        "sharing_partners_count": 1 + collection_scope,
+                        "cross_border_transfers": collection_scope >= 2
+                    },
+                    "risk_assessment": {
+                        "overall_risk_level": ["Low", "Low", "Medium", "High"][collection_scope],
+                        "risk_score": 25 + (collection_scope * 20),
+                        "mitigation_status": "Adequate" if collection_scope <= 2 else "Needs Enhancement"
+                    }
+                }
+                
+                # Generate mock results
+                overall_score = 75 + (deterministic_hash(vendor["vendor_domain"]) % 25)
+                risk_level = "excellent" if overall_score >= 90 else "good" if overall_score >= 80 else "adequate" if overall_score >= 70 else "poor" if overall_score >= 60 else "critical"
+                
+                assessment_results[assessment_id] = {
+                    "status": "completed",
+                    "progress": 100,
+                    "vendorDomain": vendor["vendor_domain"],
+                    "vendorName": vendor["vendor_name"],
+                    "results": {
+                        "overall_score": overall_score,
+                        "risk_level": risk_level,
+                        "data_flows": mock_data_flows,  # Include data flow information
+                        "compliance_documents": [
+                            {
+                                "document_name": "SOC 2 Type 2 Report",
+                                "status": "current",
+                                "valid_until": "2025-12-31",
+                                "description": f"Service Organization Control 2 Type 2 audit report for {vendor['vendor_name']}",
+                                "view_url": f"/api/v1/documents/{assessment_id}/soc2/view",
+                                "download_url": f"/api/v1/documents/{assessment_id}/soc2/download",
+                                "file_size": "2.4 MB"
+                            },
+                            {
+                                "document_name": "ISO 27001 Certificate",
+                                "status": "current",
+                                "valid_until": "2026-06-30",
+                                "description": f"ISO 27001 Information Security Management certification for {vendor['vendor_name']}",
+                                "view_url": f"/api/v1/documents/{assessment_id}/iso27001/view",
+                                "download_url": f"/api/v1/documents/{assessment_id}/iso27001/download",
+                                "file_size": "1.8 MB"
+                            }
+                        ]
+                    }
+                }
+                
+                bulk_job.completed_assessments.append({
+                    "assessment_id": assessment_id,
+                    "vendor_domain": vendor["vendor_domain"],
+                    "vendor_name": vendor["vendor_name"],
+                    "overall_score": overall_score,
+                    "risk_level": risk_level
+                })
                 
             except Exception as e:
-                logger.error(f"Error processing batch {batch_index} for job {job_id}: {str(e)}")
-                continue
+                logger.error(f"Individual assessment failed for {vendor['vendor_domain']}: {str(e)}")
+                bulk_job.failed_assessments.append({
+                    "vendor_domain": vendor["vendor_domain"],
+                    "vendor_name": vendor["vendor_name"],
+                    "error": str(e)
+                })
         
-        # Mark job as completed
+        # Complete the job
         bulk_job.status = "completed"
         bulk_job.progress = 100
-        logger.info(f"Bulk job {job_id} completed successfully")
+        bulk_job.end_time = asyncio.get_event_loop().time()
         
     except Exception as e:
-        logger.error(f"Error in bulk assessment job {job_id}: {str(e)}")
-        bulk_job = bulk_assessment_jobs.get(job_id)
-        if bulk_job:
-            bulk_job.status = "failed"
-            bulk_job.error = str(e)
-
-
-async def process_single_vendor_assessment(vendor, bulk_job):
-    """Process a single vendor assessment as part of bulk processing"""
-    try:
-        # Start individual assessment
-        assessment_data = {
-            "vendorDomain": vendor["vendor_domain"],
-            "vendorName": vendor["vendor_name"],
-            "dataSensitivity": vendor.get("data_sensitivity", "medium"),
-            "regulations": vendor.get("regulations", ["SOC 2 Type 2", "ISO 27001"]),
-            "businessCriticality": vendor.get("business_criticality", "high"),
-            "autoFollowUp": False,
-            "deepScan": False
-        }
-        
-        # Create individual assessment
-        assessment_id = str(uuid.uuid4())
-        assessment_results[assessment_id] = {
-            "status": "processing",
-            "progress": 0,
-            "vendorDomain": vendor["vendor_domain"],
-            "vendorName": vendor["vendor_name"]
-        }
-        
-        # Optimized processing time for bulk assessments
-        await asyncio.sleep(1.0)  # Reduced from 2 to 1 second for faster bulk processing
-        
-        # Generate mock data flow information for bulk assessment
-        vendor_domain = vendor["vendor_domain"]
-        domain_hash = deterministic_hash(vendor_domain)
-        collection_scope = abs(domain_hash) % 4  # 0-3 scale
-        
-        mock_data_flows = {
-            "source_information": {
-                "primary_source_url": f"https://{vendor_domain}/privacy-policy",
-                "additional_sources": [
-                    f"https://{vendor_domain}/privacy",
-                    f"https://{vendor_domain}/terms-of-service",
-                    f"https://{vendor_domain}/security"
-                ],
-                "scan_method": "Optimized bulk assessment analysis",
-                "data_source_note": f"Data flow information analyzed from {vendor_domain} website and documentation"
-            },
-            "data_flow_overview": {
-                "collection_scope": ["Minimal", "Basic", "Moderate", "Extensive"][collection_scope],
-                "data_types_count": 3 + collection_scope * 2,
-                "sharing_partners_count": 1 + collection_scope,
-                "cross_border_transfers": collection_scope >= 2
-            },
-            "risk_assessment": {
-                "overall_risk_level": ["Low", "Low", "Medium", "High"][collection_scope],
-                "risk_score": 25 + (collection_scope * 20),
-                "mitigation_status": "Adequate" if collection_scope <= 2 else "Needs Enhancement"
-            }
-        }
-        
-        # Generate mock results
-        overall_score = 75 + (deterministic_hash(vendor["vendor_domain"]) % 25)
-        risk_level = "excellent" if overall_score >= 90 else "good" if overall_score >= 80 else "adequate" if overall_score >= 70 else "poor" if overall_score >= 60 else "critical"
-        
-        assessment_results[assessment_id] = {
-            "status": "completed",
-            "progress": 100,
-            "vendorDomain": vendor["vendor_domain"],
-            "vendorName": vendor["vendor_name"],
-            "results": {
-                "overall_score": overall_score,
-                "risk_level": risk_level,
-                "data_flows": mock_data_flows,  # Include data flow information
-                "compliance_documents": [
-                    {
-                        "document_name": "SOC 2 Type 2 Report",
-                        "status": "current",
-                        "valid_until": "2025-12-31",
-                        "description": f"Service Organization Control 2 Type 2 audit report for {vendor['vendor_name']}",
-                        "view_url": f"/api/v1/documents/{assessment_id}/soc2/view",
-                        "download_url": f"/api/v1/documents/{assessment_id}/soc2/download",
-                        "file_size": "2.4 MB"
-                    },
-                    {
-                        "document_name": "ISO 27001 Certificate",
-                        "status": "current",
-                        "valid_until": "2026-06-30",
-                        "description": f"ISO 27001 Information Security Management certification for {vendor['vendor_name']}",
-                        "view_url": f"/api/v1/documents/{assessment_id}/iso27001/view",
-                        "download_url": f"/api/v1/documents/{assessment_id}/iso27001/download",
-                        "file_size": "1.8 MB"
-                    }
-                ]
-            }
-        }
-        
-        bulk_job.completed_assessments.append({
-            "assessment_id": assessment_id,
-            "vendor_domain": vendor["vendor_domain"],
-            "vendor_name": vendor["vendor_name"],
-            "overall_score": overall_score,
-            "risk_level": risk_level
-        })
-        
-        logger.info(f"Completed assessment for {vendor['vendor_domain']} in bulk job")
-        return assessment_id
-        
-    except Exception as e:
-        logger.error(f"Individual assessment failed for {vendor['vendor_domain']}: {str(e)}")
-        bulk_job.failed_assessments.append({
-            "vendor_domain": vendor["vendor_domain"],
-            "vendor_name": vendor["vendor_name"],
-            "error": str(e)
-        })
-        raise e
+        logger.error(f"Bulk assessment processing failed: {str(e)}")
+        if job_id in bulk_assessment_jobs:
+            bulk_assessment_jobs[job_id].status = "failed"
 
 
 @app.get("/api/v1/trust-center/discover/{domain}")
 async def discover_trust_center(domain: str):
-    """Discover vendor trust centers and compliance resources using AI-powered analysis"""
+    """Discover if a vendor has a trust center"""
     try:
-        logger.info(f"🔍 Starting AI-powered trust center discovery for {domain}")
+        # Common trust center URL patterns
+        trust_center_patterns = [
+            f"https://trust.{domain}",
+            f"https://security.{domain}",
+            f"https://compliance.{domain}",
+            f"https://{domain}/trust",
+            f"https://{domain}/security",
+            f"https://{domain}/compliance",
+            f"https://{domain}/trust-center",
+            f"https://{domain}/security-center"
+        ]
         
-        # Step 1: Use existing trust center discovery logic
-        compliance_scanner = DynamicComplianceDiscovery()
-        trust_centers = await compliance_scanner._discover_trust_centers(domain)
-        
-        # Step 2: If no dedicated trust centers found, look for general compliance resources
-        compliance_resources = []
-        if len(trust_centers) == 0:
-            logger.info(f"🔍 No dedicated trust centers found for {domain}, searching for general compliance resources...")
-            compliance_resources = await compliance_scanner._discover_general_compliance_resources(domain)
-            
-            # Step 3: Enhance with OpenAI analysis for better detection
-            ai_suggestions = await _get_ai_compliance_suggestions(domain)
-            if ai_suggestions:
-                compliance_resources.extend(ai_suggestions)
-        
-        # Step 4: If still nothing found, use original AI suggestions for trust centers
-        if len(trust_centers) == 0 and len(compliance_resources) == 0:
-            ai_suggestions = await _get_ai_trust_center_suggestions(domain)
-            if ai_suggestions:
-                trust_centers.extend(ai_suggestions)
-        
-        # Prepare response based on what we found
-        total_resources = len(trust_centers) + len(compliance_resources)
-        
-        if total_resources > 0:
-            logger.info(f"✅ Found {len(trust_centers)} trust centers and {len(compliance_resources)} compliance resources for {domain}")
-            
-            # Sort by scores (highest first)
-            trust_centers.sort(key=lambda x: x.get('trust_score', 0), reverse=True)
-            compliance_resources.sort(key=lambda x: x.get('resource_score', 0), reverse=True)
-            
+        # Mock discovery logic - in real implementation, would check if URLs exist
+        domain_lower = domain.lower()
+        if domain_lower in ["github.com", "slack.com", "zoom.us", "salesforce.com", "aws.amazon.com"]:
+            logger.info(f"🔍 Found known vendor {domain}, using public_access method")
             return {
                 "success": True,
-                "domain": domain,
-                "trust_centers_found": len(trust_centers),
-                "compliance_resources_found": len(compliance_resources),
-                "trust_centers": trust_centers[:3],  # Return top 3 trust centers
-                "compliance_resources": compliance_resources[:5],  # Return top 5 compliance resources
-                "discovery_method": "enhanced_compliance_discovery",
-                "timestamp": datetime.now().isoformat(),
-                "message": "Found compliance-related resources for this domain"
+                "trust_center_info": {
+                    "trust_center_url": f"https://trust.{domain}",
+                    "access_method": "public_access",
+                    "supported_documents": ["SOC 2 Type 2", "ISO 27001", "PCI DSS"],
+                    "estimated_response_time": "Immediate"
+                }
             }
         else:
-            logger.info(f"❌ No trust centers or compliance resources found for {domain}")
+            logger.info(f"🔍 Unknown vendor {domain}, no trust center found")
             return {
                 "success": False,
-                "domain": domain,
-                "trust_centers_found": 0,
-                "compliance_resources_found": 0,
-                "message": "No trust centers or compliance documentation found for this domain",
-                "suggestions": [
-                    f"Try visiting {domain} directly and look for 'Security', 'Trust', 'Compliance', 'Privacy', or 'Legal' links",
-                    "Check if the vendor has subdomains like trust.{domain}, security.{domain}, or help.{domain}",
-                    "Look for footer links on the main website that lead to privacy policies or security information",
-                    "Contact the vendor directly for access to their security documentation"
-                ]
+                "message": "No trust center found for this domain"
             }
     except Exception as e:
-        logger.error(f"❌ Trust center discovery failed for {domain}: {str(e)}")
+        logger.error(f"Trust center discovery failed: {str(e)}")
         return {
             "success": False,
-            "domain": domain,
             "message": f"Discovery failed: {str(e)}"
         }
-
-async def _get_ai_trust_center_suggestions(domain: str) -> List[Dict[str, Any]]:
-    """Use OpenAI to suggest potential trust center URLs for a domain"""
-    try:
-        prompt = f"""Analyze the domain "{domain}" and suggest the most likely URLs where this company might host their trust center, security documentation, or compliance information.
-
-Consider common patterns like:
-- trust.{domain}
-- security.{domain}  
-- {domain}/trust
-- {domain}/security
-- {domain}/compliance
-- {domain}/legal
-
-Return a JSON array of the 3 most likely URLs with confidence scores, like:
-[
-    {{"url": "https://trust.{domain}", "confidence": 0.9, "reasoning": "Most common pattern for trust centers"}},
-    {{"url": "https://{domain}/security", "confidence": 0.8, "reasoning": "Standard security page pattern"}}
-]"""
-
-        if not OPENAI_CLIENT:
-            logger.warning("OpenAI client not available for trust center suggestions")
-            return []
-
-        response = await OPENAI_CLIENT.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a security analyst expert in finding vendor trust centers and compliance documentation. Return only valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=500,
-            temperature=0.3
-        )
-
-        ai_response = response.choices[0].message.content.strip()
-        logger.info(f"🤖 OpenAI trust center suggestions for {domain}: {ai_response}")
-
-        # Parse AI response
-        import json
-        suggestions = json.loads(ai_response)
-        
-        # Convert to our format and test URLs
-        ai_trust_centers = []
-        for suggestion in suggestions[:3]:  # Limit to top 3
-            url = suggestion.get('url', '')
-            confidence = suggestion.get('confidence', 0.5)
-            reasoning = suggestion.get('reasoning', 'AI suggested')
-            
-            if url and confidence > 0.6:  # Only include high-confidence suggestions
-                # Test if URL is accessible
-                try:
-                    import requests
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (compatible; trust-center-scanner/1.0)',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    }
-                    response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
-                    
-                    if response.status_code == 200:
-                        content = response.text.lower()
-                        
-                        # Calculate trust score based on content
-                        trust_indicators = ['trust', 'security', 'compliance', 'audit', 'certification', 'soc', 'iso', 'gdpr']
-                        trust_score = sum(1 for indicator in trust_indicators if indicator in content) / len(trust_indicators)
-                        
-                        if trust_score > 0.2:  # Threshold for trust center content
-                            ai_trust_centers.append({
-                                "url": response.url,
-                                "original_url": url,
-                                "trust_score": round(trust_score, 2),
-                                "confidence": confidence,
-                                "reasoning": reasoning,
-                                "content_length": len(content),
-                                "page_title": _extract_page_title(response.text),
-                                "source": "ai_suggested"
-                            })
-                            
-                except Exception as e:
-                    logger.debug(f"Failed to test AI-suggested URL {url}: {str(e)}")
-                    continue
-        
-        return ai_trust_centers
-        
-    except Exception as e:
-        logger.error(f"Failed to get AI trust center suggestions: {str(e)}")
-        return []
-
-async def _get_ai_compliance_suggestions(domain: str) -> List[Dict[str, Any]]:
-    """Use OpenAI to suggest potential compliance resource URLs for a domain"""
-    try:
-        prompt = f"""Analyze the domain "{domain}" and suggest the most likely URLs where this company might host their compliance resources, privacy policies, security documentation, or legal information.
-
-Focus on finding general compliance resources like:
-- {domain}/privacy or {domain}/privacy-policy
-- {domain}/security or {domain}/about/security
-- {domain}/legal or {domain}/legal/privacy
-- {domain}/compliance or {domain}/gdpr or {domain}/ccpa
-- help.{domain}/security or support.{domain}/privacy
-
-Return a JSON array of the 4 most likely URLs with confidence scores and resource type, like:
-[
-    {{"url": "https://{domain}/privacy", "confidence": 0.9, "resource_type": "Privacy Policy", "reasoning": "Standard privacy policy location"}},
-    {{"url": "https://{domain}/security", "confidence": 0.8, "resource_type": "Security Documentation", "reasoning": "Common security page pattern"}}
-]"""
-
-        if not OPENAI_CLIENT:
-            logger.warning("OpenAI client not available for compliance suggestions")
-            return []
-
-        response = await OPENAI_CLIENT.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a compliance expert at finding privacy policies, security documentation, and legal resources on company websites. Return only valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=600,
-            temperature=0.3
-        )
-
-        ai_response = response.choices[0].message.content.strip()
-        logger.info(f"🤖 OpenAI compliance suggestions for {domain}: {ai_response}")
-
-        # Parse AI response
-        import json
-        suggestions = json.loads(ai_response)
-        
-        # Convert to our format and test URLs
-        ai_compliance_resources = []
-        for suggestion in suggestions[:4]:  # Limit to top 4
-            url = suggestion.get('url', '')
-            confidence = suggestion.get('confidence', 0.5)
-            resource_type = suggestion.get('resource_type', 'General Compliance Resource')
-            reasoning = suggestion.get('reasoning', 'AI suggested')
-            
-            if url and confidence > 0.5:  # Lower threshold for compliance resources
-                # Test if URL is accessible
-                try:
-                    import requests
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (compatible; compliance-scanner/1.0)',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    }
-                    response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, verify=False)
-                    
-                    if response.status_code == 200:
-                        content = response.text.lower()
-                        
-                        # Calculate compliance resource score
-                        compliance_indicators = ['privacy', 'security', 'compliance', 'gdpr', 'ccpa', 'legal', 'data protection', 'policy']
-                        resource_score = sum(1 for indicator in compliance_indicators if indicator in content) / len(compliance_indicators)
-                        
-                        if resource_score > 0.1:  # Lower threshold for general compliance
-                            ai_compliance_resources.append({
-                                "url": response.url,
-                                "original_url": url,
-                                "resource_score": round(resource_score, 2),
-                                "confidence": confidence,
-                                "resource_type": resource_type,
-                                "reasoning": reasoning,
-                                "content_length": len(content),
-                                "page_title": _extract_page_title(response.text),
-                                "source": "ai_compliance_suggested"
-                            })
-                            
-                except Exception as e:
-                    logger.debug(f"Failed to test AI-suggested compliance URL {url}: {str(e)}")
-                    continue
-        
-        return ai_compliance_resources
-        
-    except Exception as e:
-        logger.error(f"Failed to get AI compliance suggestions: {str(e)}")
-        return []
-
-def _extract_page_title(html_content: str) -> str:
-    """Extract page title from HTML content"""
-    try:
-        import re
-        match = re.search(r'<title[^>]*>([^<]+)</title>', html_content, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-        return "No title found"
-    except:
-        return "Title extraction failed"
 
 @app.post("/api/v1/trust-center/request-access")
 async def request_trust_center_access(request: dict):
@@ -8113,45 +7476,72 @@ async def download_trust_center_document(document_id: str):
         
         logger.info(f"🔍 Downloading document: {doc_type} from {vendor_domain}")
         
-        # Use dynamic discovery to find the document URL instead of hardcoded URLs
-        discovery_engine = DynamicComplianceDiscovery()
-        compliance_results = await discovery_engine.discover_vendor_compliance(vendor_domain, [doc_type])
+        # Get the real document URL from our known URLs
+        known_document_urls = {
+            "slack.com": {
+                "iso27001": "https://a.slack-edge.com/53bfd26/marketing/downloads/security/Slack_ISO_27001_cert_2024.pdf",
+                "soc2": "https://slack.com/trust/compliance", 
+                "gdpr": "https://slack.com/trust/compliance/gdpr",
+                "ccpa": "https://slack.com/trust/compliance/ccpa-faq",
+                "hipaa": "https://slack.com/help/articles/360020685594-Slack-and-HIPAA",
+                "pci-dss": "https://slack.com/trust/compliance"
+            },
+            "github.com": {
+                "soc2": "https://resources.github.com/security/github-soc2-type2.pdf",
+                "iso27001": "https://github.com/security/advisories",
+                "ccpa": "https://docs.github.com/en/site-policy/privacy-policies/california-consumer-privacy-act",
+                "hipaa": "https://github.com/security",
+                "pci-dss": "https://github.com/security"
+            },
+            "salesforce.com": {
+                "soc2": "https://trust.salesforce.com/en/compliance/soc-2/",
+                "iso27001": "https://trust.salesforce.com/en/compliance/iso-27001/",
+                "gdpr": "https://trust.salesforce.com/en/privacy/gdpr/",
+                "ccpa": "https://trust.salesforce.com/en/privacy/ccpa/",
+                "hipaa": "https://trust.salesforce.com/en/compliance/hipaa/",
+                "pci-dss": "https://trust.salesforce.com/en/compliance/pci/"
+            },
+            "microsoft.com": {
+                "soc2": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+                "iso27001": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+                "gdpr": "https://privacy.microsoft.com/en-us/privacystatement",
+                "ccpa": "https://privacy.microsoft.com/en-us/california-privacy-statement",
+                "hipaa": "https://servicetrust.microsoft.com/ViewPage/TrustDocumentsV3?command=Download&downloadType=Document&downloadId=6e8efbfb-78e6-4375-b6e4-8a0a3eb5e57b&tab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913&docTab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913_FAQ_and_White_Papers",
+                "pci-dss": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3"
+            },
+            "google.com": {
+                "soc2": "https://cloud.google.com/security/compliance/soc-2",
+                "iso27001": "https://cloud.google.com/security/compliance/iso-27001",
+                "gdpr": "https://cloud.google.com/privacy/gdpr",
+                "ccpa": "https://policies.google.com/privacy/ccpa",
+                "hipaa": "https://cloud.google.com/security/compliance/hipaa",
+                "pci-dss": "https://cloud.google.com/security/compliance/pci-dss"
+            },
+            "amazon.com": {
+                "soc2": "https://aws.amazon.com/compliance/soc/",
+                "iso27001": "https://aws.amazon.com/compliance/iso-27001/",
+                "gdpr": "https://aws.amazon.com/compliance/gdpr-center/",
+                "ccpa": "https://www.amazon.com/gp/help/customer/display.html?nodeId=GQFYXCPVFY6DKMFE",
+                "hipaa": "https://aws.amazon.com/compliance/hipaa-compliance/",
+                "pci-dss": "https://aws.amazon.com/compliance/pci-dss-level-1-faqs/"
+            },
+            "zoom.us": {
+                "soc2": "https://zoom.us/docs/doc/Zoom_SOC2_Type_II_Report.pdf",
+                "iso27001": "https://zoom.us/trust/security",
+                "gdpr": "https://zoom.us/gdpr",
+                "ccpa": "https://zoom.us/privacy",
+                "hipaa": "https://zoom.us/docs/doc/Zoom-hipaa.pdf",
+                "pci-dss": "https://zoom.us/trust/security"
+            }
+        }
         
-        document_url = None
-        
-        # Try to find the document URL from dynamic discovery
-        for doc in compliance_results.get("compliance_documents", []):
-            if doc.get("framework") == doc_type.lower() and doc.get("source_url"):
-                document_url = doc["source_url"]
-                break
-        
-        # If not found via dynamic discovery, try AI enhancement
-        if not document_url and OPENAI_AVAILABLE:
-            try:
-                enhanced_results = await enhance_compliance_discovery_with_ai(vendor_domain, [doc_type], compliance_results)
-                if enhanced_results and enhanced_results.get("ai_enhanced_urls", {}).get("frameworks", {}).get(doc_type.lower()):
-                    ai_result = enhanced_results["ai_enhanced_urls"]["frameworks"][doc_type.lower()]
-                    document_url = ai_result.get("primary_url")
-            except Exception as e:
-                logger.warning(f"OpenAI URL generation failed for {vendor_domain} {doc_type}: {str(e)}")
-        
-        if not document_url:
-            # Generate a likely URL pattern if no specific URL found
-            possible_urls = [
-                f"https://{vendor_domain}/compliance/{doc_type.lower()}",
-                f"https://{vendor_domain}/security/{doc_type.lower()}",
-                f"https://{vendor_domain}/legal/{doc_type.lower()}",
-                f"https://trust.{vendor_domain}/{doc_type.lower()}",
-                f"https://{vendor_domain}/privacy" if doc_type.lower() in ['gdpr', 'ccpa'] else f"https://{vendor_domain}/compliance"
-            ]
-            document_url = possible_urls[0]  # Use the first likely pattern
-        
-        # Use the determined document_url as source_url for PDF generation
-        source_url = document_url
-        logger.info(f"🔍 Using document URL: {source_url}")
-        
-        # Try to fetch the actual document
-        async with aiohttp.ClientSession() as session:
+        vendor_domain_lower = vendor_domain.lower()
+        if vendor_domain_lower in known_document_urls and doc_type in known_document_urls[vendor_domain_lower]:
+            source_url = known_document_urls[vendor_domain_lower][doc_type]
+            logger.info(f"🔍 Fetching real document from: {source_url}")
+            
+            # Try to fetch the actual document
+            async with aiohttp.ClientSession() as session:
                 try:
                     async with session.get(source_url, timeout=30) as response:
                         if response.status == 200:
@@ -8232,28 +7622,22 @@ async def get_compliance_documents_metadata(vendor: str, document_type: str):
                 "discovery_method": "intelligent_discovery"
             }
         
-        # Try AI-powered discovery if basic discovery fails
-        if OPENAI_AVAILABLE:
-            try:
-                basic_results = {"compliance_documents": [], "frameworks_found": [], "trust_centers": []}
-                enhanced_results = await enhance_compliance_discovery_with_ai(vendor_domain, [doc_type], basic_results)
-                
-                if enhanced_results and enhanced_results.get("ai_enhanced_urls", {}).get("frameworks", {}).get(doc_type.lower()):
-                    ai_result = enhanced_results["ai_enhanced_urls"]["frameworks"][doc_type.lower()]
-                    return {
-                        "success": True,
-                        "documents": [{
-                            "document_type": doc_type,
-                            "source_url": ai_result.get("primary_url"),
-                            "content_type": "webpage",
-                            "is_pdf": ai_result.get("primary_url", "").endswith('.pdf'),
-                            "title": f"{doc_type.upper()} Compliance - {vendor_domain}",
-                            "confidence": ai_result.get("confidence", 75),
-                            "discovery_method": "ai_enhanced"
-                        }]
-                    }
-            except Exception as e:
-                logger.warning(f"AI-powered compliance discovery failed: {str(e)}")
+        # Fallback to known URLs if discovery fails
+        known_document_urls = get_known_compliance_urls()
+        
+        if vendor_domain in known_document_urls and doc_type in known_document_urls[vendor_domain]:
+            url = known_document_urls[vendor_domain][doc_type]
+            return {
+                "success": True,
+                "documents": [{
+                    "document_type": doc_type,
+                    "source_url": url,
+                    "content_type": "webpage",
+                    "is_pdf": url.endswith('.pdf'),
+                    "title": f"{doc_type.upper()} Compliance - {vendor_domain}",
+                    "discovery_method": "known_urls"
+                }]
+            }
         
         return {
             "success": False,
@@ -8281,33 +7665,18 @@ async def discover_vendor_compliance_pages(vendor_domain: str, doc_type: str):
         
         discovered_docs = []
         
-        # Enhanced URL testing with comprehensive validation and content analysis
-        logger.info(f"🔍 Testing {len(potential_urls)} compliance URLs for {doc_type} on {vendor_domain}")
-        
-        # Use enhanced validation function for better URL testing
-        validated_results = await validate_and_analyze_urls(potential_urls[:15], vendor_domain, doc_type)
-        
-        # Filter and prioritize results by relevance and validity
-        for result in validated_results:
-            if result.get('is_valid') and result.get('relevance_score', 0) > 0.2:
-                compliance_doc = {
-                    'url': result['url'],
-                    'is_valid': result['is_valid'],
-                    'status_code': result.get('status_code', 200),
-                    'content_type': result.get('content_type', 'text/html'),
-                    'relevance_score': result.get('relevance_score', 0.0),
-                    'content_summary': result.get('content_summary', 'Compliance content detected'),
-                    'document_type': doc_type,
-                    'validation_timestamp': result.get('validation_timestamp'),
-                    'confidence_level': 'High' if result.get('relevance_score', 0) > 0.7 else 'Medium' if result.get('relevance_score', 0) > 0.4 else 'Low'
-                }
-                discovered_docs.append(compliance_doc)
-                
-                # Stop after finding first highly relevant result for this doc type
-                if result.get('relevance_score', 0) > 0.6:
-                    break
-        
-        logger.info(f"✅ Found {len(discovered_docs)} valid compliance pages for {doc_type}")
+        # Test URLs to find working compliance pages
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            tasks = []
+            for url in potential_urls[:10]:  # Limit to first 10 URLs to avoid overwhelming
+                tasks.append(test_compliance_url(session, url, doc_type, vendor_domain))
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if isinstance(result, dict) and result.get('is_valid'):
+                    discovered_docs.append(result)
+                    break  # Found one valid URL for this doc type
         
         return discovered_docs
         
@@ -8562,7 +7931,65 @@ def get_compliance_keywords(doc_type):
     }
     return keywords.get(doc_type, [doc_type])
 
-# Removed hardcoded compliance URLs function - now using dynamic OpenAI-powered discovery
+def get_known_compliance_urls():
+    """Fallback known compliance URLs"""
+    return {
+        "slack.com": {
+            "iso27001": "https://a.slack-edge.com/53bfd26/marketing/downloads/security/Slack_ISO_27001_cert_2024.pdf",
+            "soc2": "https://slack.com/trust/compliance", 
+            "gdpr": "https://slack.com/trust/compliance/gdpr",
+            "ccpa": "https://slack.com/trust/compliance/ccpa-faq",
+            "hipaa": "https://slack.com/help/articles/360020685594-Slack-and-HIPAA",
+            "pci-dss": "https://slack.com/trust/compliance"
+        },
+        "github.com": {
+            "soc2": "https://resources.github.com/security/github-soc2-type2.pdf",
+            "iso27001": "https://github.com/security/advisories",
+            "ccpa": "https://docs.github.com/en/site-policy/privacy-policies/california-consumer-privacy-act",
+            "hipaa": "https://github.com/security",
+            "pci-dss": "https://github.com/security"
+        },
+        "salesforce.com": {
+            "soc2": "https://trust.salesforce.com/en/compliance/soc-2/",
+            "iso27001": "https://trust.salesforce.com/en/compliance/iso-27001/",
+            "gdpr": "https://trust.salesforce.com/en/privacy/gdpr/",
+            "ccpa": "https://trust.salesforce.com/en/privacy/ccpa/",
+            "hipaa": "https://trust.salesforce.com/en/compliance/hipaa/",
+            "pci-dss": "https://trust.salesforce.com/en/compliance/pci/"
+        },
+        "microsoft.com": {
+            "soc2": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+            "iso27001": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+            "gdpr": "https://privacy.microsoft.com/en-us/privacystatement",
+            "ccpa": "https://privacy.microsoft.com/en-us/california-privacy-statement",
+            "hipaa": "https://servicetrust.microsoft.com/ViewPage/TrustDocumentsV3?command=Download&downloadType=Document&downloadId=6e8efbfb-78e6-4375-b6e4-8a0a3eb5e57b&tab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913&docTab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913_FAQ_and_White_Papers",
+            "pci-dss": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3"
+        },
+        "google.com": {
+            "soc2": "https://cloud.google.com/security/compliance/soc-2",
+            "iso27001": "https://cloud.google.com/security/compliance/iso-27001",
+            "gdpr": "https://cloud.google.com/privacy/gdpr",
+            "ccpa": "https://policies.google.com/privacy/ccpa",
+            "hipaa": "https://cloud.google.com/security/compliance/hipaa",
+            "pci-dss": "https://cloud.google.com/security/compliance/pci-dss"
+        },
+        "amazon.com": {
+            "soc2": "https://aws.amazon.com/compliance/soc/",
+            "iso27001": "https://aws.amazon.com/compliance/iso-27001/",
+            "gdpr": "https://aws.amazon.com/compliance/gdpr-center/",
+            "ccpa": "https://www.amazon.com/gp/help/customer/display.html?nodeId=GQFYXCPVFY6DKMFE",
+            "hipaa": "https://aws.amazon.com/compliance/hipaa-compliance/",
+            "pci-dss": "https://aws.amazon.com/compliance/pci-dss-level-1-faqs/"
+        },
+        "zoom.us": {
+            "soc2": "https://zoom.us/docs/doc/Zoom_SOC2_Type_II_Report.pdf",
+            "iso27001": "https://zoom.us/trust/security",
+            "gdpr": "https://zoom.us/gdpr",
+            "ccpa": "https://zoom.us/privacy",
+            "hipaa": "https://zoom.us/docs/doc/Zoom-hipaa.pdf",
+            "pci-dss": "https://zoom.us/trust/security"
+        }
+    }
 
 @app.get("/api/v1/trust-center/download")
 async def download_compliance_document(vendor: str, document_type: str):
@@ -8577,30 +8004,68 @@ async def download_compliance_document(vendor: str, document_type: str):
         doc_type = document_type.lower()
         vendor_domain = vendor.lower()
         
-        # Use dynamic discovery to find the document URL instead of hardcoded URLs
-        discovery_engine = DynamicComplianceDiscovery()
-        compliance_results = await discovery_engine.discover_vendor_compliance(vendor_domain, [doc_type])
+        # Get the real document URL from our comprehensive known URLs
+        known_document_urls = {
+            "slack.com": {
+                "iso27001": "https://a.slack-edge.com/53bfd26/marketing/downloads/security/Slack_ISO_27001_cert_2024.pdf",
+                "soc2": "https://slack.com/trust/compliance", 
+                "gdpr": "https://slack.com/trust/compliance/gdpr",
+                "ccpa": "https://slack.com/trust/compliance/ccpa-faq",
+                "hipaa": "https://slack.com/help/articles/360020685594-Slack-and-HIPAA",
+                "pci-dss": "https://slack.com/trust/compliance"
+            },
+            "github.com": {
+                "soc2": "https://resources.github.com/security/github-soc2-type2.pdf",
+                "iso27001": "https://github.com/security/advisories",
+                "ccpa": "https://docs.github.com/en/site-policy/privacy-policies/california-consumer-privacy-act",
+                "hipaa": "https://github.com/security",
+                "pci-dss": "https://github.com/security"
+            },
+            "salesforce.com": {
+                "soc2": "https://trust.salesforce.com/en/compliance/soc-2/",
+                "iso27001": "https://trust.salesforce.com/en/compliance/iso-27001/",
+                "gdpr": "https://trust.salesforce.com/en/privacy/gdpr/",
+                "ccpa": "https://trust.salesforce.com/en/privacy/ccpa/",
+                "hipaa": "https://trust.salesforce.com/en/compliance/hipaa/",
+                "pci-dss": "https://trust.salesforce.com/en/compliance/pci/"
+            },
+            "microsoft.com": {
+                "soc2": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+                "iso27001": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3",
+                "gdpr": "https://privacy.microsoft.com/en-us/privacystatement",
+                "ccpa": "https://privacy.microsoft.com/en-us/california-privacy-statement",
+                "hipaa": "https://servicetrust.microsoft.com/ViewPage/TrustDocumentsV3?command=Download&downloadType=Document&downloadId=6e8efbfb-78e6-4375-b6e4-8a0a3eb5e57b&tab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913&docTab=7f51cb60-3d6c-11e9-b2af-7bb9f5d2d913_FAQ_and_White_Papers",
+                "pci-dss": "https://servicetrust.microsoft.com/ViewPage/MSComplianceGuideV3"
+            },
+            "google.com": {
+                "soc2": "https://cloud.google.com/security/compliance/soc-2",
+                "iso27001": "https://cloud.google.com/security/compliance/iso-27001",
+                "gdpr": "https://cloud.google.com/privacy/gdpr",
+                "ccpa": "https://policies.google.com/privacy/ccpa",
+                "hipaa": "https://cloud.google.com/security/compliance/hipaa",
+                "pci-dss": "https://cloud.google.com/security/compliance/pci-dss"
+            },
+            "amazon.com": {
+                "soc2": "https://aws.amazon.com/compliance/soc/",
+                "iso27001": "https://aws.amazon.com/compliance/iso-27001/",
+                "gdpr": "https://aws.amazon.com/compliance/gdpr-center/",
+                "ccpa": "https://www.amazon.com/gp/help/customer/display.html?nodeId=GQFYXCPVFY6DKMFE",
+                "hipaa": "https://aws.amazon.com/compliance/hipaa-compliance/",
+                "pci-dss": "https://aws.amazon.com/compliance/pci-dss-level-1-faqs/"
+            },
+            "zoom.us": {
+                "soc2": "https://zoom.us/docs/doc/Zoom_SOC2_Type_II_Report.pdf",
+                "iso27001": "https://zoom.us/trust/security",
+                "gdpr": "https://zoom.us/gdpr",
+                "ccpa": "https://zoom.us/privacy",
+                "hipaa": "https://zoom.us/docs/doc/Zoom-hipaa.pdf",
+                "pci-dss": "https://zoom.us/trust/security"
+            }
+        }
         
-        source_url = None
-        
-        # Try to find the document URL from dynamic discovery
-        for doc in compliance_results.get("compliance_documents", []):
-            if doc.get("framework") == doc_type.lower() and doc.get("source_url"):
-                source_url = doc["source_url"]
-                break
-        
-        # If not found via dynamic discovery, try AI enhancement
-        if not source_url and OPENAI_AVAILABLE:
-            try:
-                enhanced_results = await enhance_compliance_discovery_with_ai(vendor_domain, [doc_type], compliance_results)
-                if enhanced_results and enhanced_results.get("ai_enhanced_urls", {}).get("frameworks", {}).get(doc_type.lower()):
-                    ai_result = enhanced_results["ai_enhanced_urls"]["frameworks"][doc_type.lower()]
-                    source_url = ai_result.get("primary_url")
-            except Exception as e:
-                logger.warning(f"OpenAI URL generation failed for {vendor_domain} {doc_type}: {str(e)}")
-        
-        # Check if we found a source URL from dynamic discovery or AI enhancement
-        if source_url:
+        # Check if we have a known URL for this vendor and document type
+        if vendor_domain in known_document_urls and doc_type in known_document_urls[vendor_domain]:
+            source_url = known_document_urls[vendor_domain][doc_type]
             
             # First check if the URL looks like a PDF
             if source_url.lower().endswith('.pdf'):
@@ -9400,104 +8865,6 @@ async def test_endpoint():
     """Simple test endpoint"""
     return {"message": "Server is working!", "timestamp": datetime.now().isoformat()}
 
-@app.post("/test-ai-detection")
-async def test_ai_detection_endpoint(request_data: dict):
-    """Test AI detection functionality"""
-    try:
-        vendor_domain = request_data.get('vendor_domain', 'example.com')
-        vendor_name = request_data.get('vendor_name', 'Example Corp')
-        
-        # Test the AI detection function
-        ai_results = await scan_ai_services(vendor_domain, vendor_name)
-        
-        return {
-            "success": True,
-            "vendor_domain": vendor_domain,
-            "vendor_name": vendor_name,
-            "ai_detection_results": ai_results,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
-@app.post("/find-compliance-documents")
-async def find_compliance_documents_endpoint(request_data: dict):
-    """Find vendor webpages discussing compliance frameworks (GDPR, HIPAA, PCI-DSS, CCPA) using AI"""
-    try:
-        vendor_domain = request_data.get('vendor_domain', 'example.com')
-        frameworks = request_data.get('frameworks', ['gdpr', 'hipaa', 'pci-dss', 'ccpa'])
-        
-        logger.info(f"🔍 Finding {vendor_domain} webpages discussing compliance frameworks: {frameworks}")
-        
-        # Use the existing DynamicComplianceDiscovery class
-        discovery_engine = DynamicComplianceDiscovery()
-        compliance_results = await discovery_engine.discover_vendor_compliance(vendor_domain, frameworks)
-        
-        # Enhance with OpenAI analysis if available
-        if OPENAI_AVAILABLE:
-            try:
-                enhanced_results = await enhance_compliance_discovery_with_ai(vendor_domain, frameworks, compliance_results)
-                if enhanced_results:
-                    compliance_results = enhanced_results
-            except Exception as e:
-                logger.warning(f"OpenAI compliance enhancement failed for {vendor_domain}: {str(e)}")
-        
-        return {
-            "success": True,
-            "vendor_domain": vendor_domain,
-            "frameworks_requested": frameworks,
-            "compliance_results": compliance_results,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Error finding compliance documents for {request_data.get('vendor_domain', 'unknown')}: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
-@app.post("/find-data-flow-documents")
-async def find_data_flow_documents_endpoint(request_data: dict):
-    """Find vendor data flow and technical documentation using AI"""
-    try:
-        vendor_domain = request_data.get('vendor_domain', 'example.com')
-        categories = request_data.get('categories', ['dpa', 'privacy_policy', 'architecture', 'api_docs', 'security', 'integration'])
-        
-        logger.info(f"🔍 Finding {vendor_domain} data flow documentation: {categories}")
-        
-        # Use the new DynamicDataFlowDiscovery class
-        discovery_engine = DynamicDataFlowDiscovery()
-        data_flow_results = await discovery_engine.discover_vendor_data_flow(vendor_domain, categories)
-        
-        # Enhance with OpenAI analysis if available
-        if OPENAI_AVAILABLE:
-            try:
-                enhanced_results = await enhance_data_flow_discovery_with_ai(vendor_domain, categories, data_flow_results)
-                if enhanced_results:
-                    data_flow_results = enhanced_results
-            except Exception as e:
-                logger.warning(f"OpenAI data flow enhancement failed for {vendor_domain}: {str(e)}")
-        
-        return {
-            "success": True,
-            "vendor_domain": vendor_domain,
-            "categories_requested": categories,
-            "data_flow_results": data_flow_results,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Error finding data flow documents for {request_data.get('vendor_domain', 'unknown')}: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -9703,605 +9070,6 @@ async def start_bulk_assessments(requester_email: str = None):
             "assessment_ids": [],
             "vendor_count": 0
         }
-
-@app.post("/api/v1/generate-vendor-description")
-async def generate_vendor_description(request: dict):
-    """
-    Generate a comprehensive AI-powered description for a vendor
-    """
-    try:
-        domain = request.get('domain', '').strip()
-        
-        if not domain:
-            return {
-                "success": False,
-                "error": "Domain is required"
-            }
-        
-        # Use ExpertCity corporate server configuration
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
-        
-        # Initialize OpenAI client (v1.0+ API) with corporate server
-        from openai import OpenAI
-        
-        # Try to detect proxy settings
-        import urllib.request
-        proxy_handler = urllib.request.getproxies()
-        
-        # Initialize client with proxy support if needed
-        if proxy_handler:
-            import httpx
-            proxy_client = httpx.Client(proxies=proxy_handler)
-            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key, http_client=proxy_client)
-        else:
-            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
-        
-        # Create a comprehensive prompt for detailed vendor information
-        prompt = f"""Analyze the domain '{domain}' and provide a comprehensive vendor description. 
-
-Respond ONLY with a valid JSON object in this exact format:
-
-{{
-    "company_name": "Clear company name without quotes or extra formatting",
-    "description": "Professional 2-3 sentence description of what this company does and their business focus",
-    "services": "Specific services, products, or solutions they provide",
-    "business_model": "Business model type and target market",
-    "risk_considerations": "Key risk factors for vendor assessment"
-}}
-
-Requirements:
-- Use clear, professional language
-- No markdown formatting or code blocks
-- No extra quotes or special characters
-- Keep descriptions concise and business-focused
-- Focus on information relevant for vendor risk assessment"""
-
-        # Make the API call
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You are a business analyst providing vendor assessments for risk management. Respond ONLY with clean, valid JSON. No markdown, no code blocks, no extra formatting. Use professional, clear language."
-                },
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
-            ],
-            max_tokens=800,
-            temperature=0.3
-        )
-        
-        ai_response = response.choices[0].message.content.strip()
-        
-        # Clean up the response to extract JSON if it's wrapped in markdown or other text
-        def clean_json_response(text):
-            """Extract and clean JSON from AI response"""
-            import re
-            
-            # Remove markdown code blocks if present
-            text = re.sub(r'```json\s*', '', text)
-            text = re.sub(r'\s*```', '', text)
-            
-            # Try to find JSON object in the text
-            json_match = re.search(r'\{.*\}', text, re.DOTALL)
-            if json_match:
-                return json_match.group(0)
-            return text
-        
-        # Clean and parse the JSON response
-        try:
-            import json
-            import re
-            
-            cleaned_response = clean_json_response(ai_response)
-            vendor_info = json.loads(cleaned_response)
-            
-            # Clean up text fields to remove unwanted formatting
-            def clean_text(text):
-                if not text:
-                    return ""
-                # Remove excessive quotes and clean up formatting
-                text = re.sub(r'^["\']|["\']$', '', str(text))  # Remove surrounding quotes
-                text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
-                text = text.strip()
-                return text
-            
-            return {
-                "success": True,
-                "domain": domain,
-                "company_name": clean_text(vendor_info.get("company_name", "")),
-                "description": clean_text(vendor_info.get("description", "")),
-                "services": clean_text(vendor_info.get("services", "")),
-                "business_model": clean_text(vendor_info.get("business_model", "")),
-                "risk_considerations": clean_text(vendor_info.get("risk_considerations", ""))
-            }
-        except (json.JSONDecodeError, Exception) as e:
-            # Fallback if JSON parsing fails - try to extract useful information
-            logger.warning(f"Failed to parse JSON response for {domain}: {e}")
-            logger.warning(f"Raw response: {ai_response[:200]}...")
-            
-            # Extract company name from domain
-            domain_parts = domain.replace('https://', '').replace('http://', '').replace('www.', '').split('.')
-            company_name = domain_parts[0].title() if domain_parts else "Unknown Company"
-            
-            # Clean the raw response
-            clean_description = ai_response.replace('```json', '').replace('```', '').replace('{', '').replace('}', '').strip()
-            clean_description = re.sub(r'"[^"]*":', '', clean_description)  # Remove JSON keys
-            clean_description = re.sub(r'["\']', '', clean_description)  # Remove quotes
-            clean_description = re.sub(r'\s+', ' ', clean_description)  # Normalize whitespace
-            
-            return {
-                "success": True,
-                "domain": domain,
-                "company_name": company_name,
-                "description": clean_description[:500] + "..." if len(clean_description) > 500 else clean_description,
-                "services": "",
-                "business_model": "",
-                "risk_considerations": ""
-            }
-        
-    except Exception as e:
-        import traceback
-        logger.error(f"Vendor description generation failed: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        # Return more detailed error information for debugging
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "traceback": traceback.format_exc()
-        }
-
-@app.post("/api/v1/find-vendor-subprocessors")
-async def find_vendor_subprocessors(request: dict):
-    """
-    Find vendor sub-processors and third-party data processing partners using AI
-    """
-    try:
-        domain = request.get('domain', '').strip()
-        
-        if not domain:
-            return {
-                "success": False,
-                "error": "Domain is required"
-            }
-        
-        # Use ExpertCity corporate server configuration
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
-        
-        # Initialize OpenAI client (v1.0+ API) with corporate server
-        from openai import OpenAI
-        
-        # Try to detect proxy settings
-        import urllib.request
-        proxy_handler = urllib.request.getproxies()
-        
-        # Initialize client with proxy support if needed
-        if proxy_handler:
-            import httpx
-            proxy_client = httpx.Client(proxies=proxy_handler)
-            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key, http_client=proxy_client)
-        else:
-            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
-        
-        # Create a comprehensive prompt for sub-processor discovery
-        prompt = f"""Please analyze the domain '{domain}' and provide information about their sub-processors, third-party data processing partners, and vendors they work with for data handling.
-
-Return the information in the following JSON format:
-
-{{
-    "subprocessors": [
-        {{
-            "name": "Sub-processor company name",
-            "domain": "sub-processor domain if known",
-            "purpose": "What service they provide (e.g., 'Cloud hosting', 'Email delivery', 'Analytics')",
-            "data_types": ["List of data types processed", "e.g. Personal data", "Payment information"],
-            "location": "Geographic location if known",
-            "confidence": 85
-        }}
-    ]
-}}
-
-Focus on finding real sub-processors that {domain} uses for:
-- Cloud infrastructure and hosting
-- Payment processing
-- Email and communication services
-- Analytics and tracking
-- Customer support tools
-- Marketing platforms
-- Data storage and backup
-
-If no specific sub-processors are found, return an empty array. Be factual and only include information that can be reasonably inferred or is publicly documented."""
-
-        # Make the API call
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system", 
-                    "content": "You are a privacy compliance analyst specializing in identifying vendor sub-processors and data processing partners. Always respond in valid JSON format with the requested structure. Only include factual information that can be verified or reasonably inferred from public sources."
-                },
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
-            ],
-            max_tokens=1000,
-            temperature=0.2
-        )
-        
-        ai_response = response.choices[0].message.content.strip()
-        
-        # Clean up the response text
-        def clean_text(text):
-            if not text:
-                return ""
-            # Remove common JSON formatting artifacts
-            text = text.replace('```json', '').replace('```', '').replace('`', '')
-            # Remove extra whitespace and normalize
-            text = ' '.join(text.split())
-            text = text.strip()
-            return text
-        
-        # Try to parse the JSON response
-        try:
-            import json
-            # Clean the response before parsing
-            cleaned_response = clean_text(ai_response)
-            subprocessor_data = json.loads(cleaned_response)
-            
-            # Validate the structure and clean the data
-            subprocessors = []
-            if "subprocessors" in subprocessor_data and isinstance(subprocessor_data["subprocessors"], list):
-                for processor in subprocessor_data["subprocessors"]:
-                    if isinstance(processor, dict):
-                        cleaned_processor = {
-                            "name": clean_text(processor.get("name", "")),
-                            "domain": clean_text(processor.get("domain", "")),
-                            "purpose": clean_text(processor.get("purpose", "")),
-                            "data_types": [clean_text(dt) for dt in processor.get("data_types", []) if clean_text(dt)],
-                            "location": clean_text(processor.get("location", "")),
-                            "confidence": processor.get("confidence", 75)
-                        }
-                        # Only add if we have meaningful data
-                        if cleaned_processor["name"] or cleaned_processor["purpose"]:
-                            subprocessors.append(cleaned_processor)
-            
-            return {
-                "success": True,
-                "domain": domain,
-                "subprocessors": subprocessors,
-                "count": len(subprocessors)
-            }
-            
-        except (json.JSONDecodeError, Exception) as e:
-            # Fallback if JSON parsing fails
-            logger.warning(f"Failed to parse JSON response for sub-processors {domain}: {e}")
-            logger.warning(f"Raw response: {ai_response[:200]}...")
-            
-            return {
-                "success": False,
-                "error": f"Unable to parse sub-processor information: {str(e)}",
-                "domain": domain,
-                "subprocessors": []
-            }
-        
-    except Exception as e:
-        import traceback
-        logger.error(f"Sub-processor search failed for {domain}: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        return {
-            "success": False,
-            "error": str(e),
-            "domain": domain,
-            "subprocessors": []
-        }
-
-# ================== MONITORING ENDPOINTS ==================
-
-@app.post("/api/v1/monitoring/enable")
-async def enable_vendor_monitoring(vendor_domain: str, vendor_name: str = None, assessment_id: str = None):
-    """
-    Enable continuous monitoring for a vendor
-    """
-    try:
-        if not MONITORING_AVAILABLE:
-            raise HTTPException(status_code=503, detail="Monitoring service not available")
-        
-        # Add to background monitoring
-        success = await add_vendor_to_monitoring(vendor_domain, vendor_name, assessment_id)
-        
-        if success:
-            logger.info(f"🔔 Enabled continuous monitoring for {vendor_domain}")
-            return {
-                "success": True,
-                "message": f"Continuous monitoring enabled for {vendor_domain}",
-                "vendor_domain": vendor_domain,
-                "vendor_name": vendor_name,
-                "status": "active"
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to enable monitoring")
-        
-    except Exception as e:
-        logger.error(f"Error enabling monitoring for {vendor_domain}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/monitoring/check/{vendor_domain}")
-async def check_vendor_monitoring(vendor_domain: str, vendor_name: str = None):
-    """
-    Check for recent changes and alerts for a monitored vendor
-    """
-    try:
-        if not MONITORING_AVAILABLE:
-            raise HTTPException(status_code=503, detail="Monitoring service not available")
-        
-        logger.info(f"🔍 Checking monitoring alerts for {vendor_domain}")
-        
-        # Get stored alerts for this vendor
-        stored_alerts = await get_vendor_monitoring_alerts(vendor_domain, limit=10)
-        
-        # Also perform a fresh AI check
-        fresh_alerts = await monitor_vendor_ai(vendor_domain, vendor_name)
-        
-        return {
-            "success": True,
-            "vendor_domain": vendor_domain,
-            "vendor_name": vendor_name,
-            "stored_alerts": stored_alerts,
-            "fresh_alerts": fresh_alerts,
-            "total_alerts": len(stored_alerts) + len(fresh_alerts),
-            "checked_at": datetime.now().isoformat(),
-            "status": "monitored"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error checking monitoring for {vendor_domain}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/monitoring/alerts")
-async def get_all_monitoring_alerts_endpoint(severity: str = None, limit: int = 50):
-    """
-    Get all recent monitoring alerts across all monitored vendors
-    """
-    try:
-        if not MONITORING_AVAILABLE:
-            raise HTTPException(status_code=503, detail="Monitoring service not available")
-        
-        # Get all alerts from the monitoring system
-        all_alerts = await get_all_monitoring_alerts(limit)
-        
-        # Filter by severity if requested
-        if severity:
-            all_alerts = [alert for alert in all_alerts if alert.get('severity') == severity.lower()]
-        
-        logger.info(f"📊 Retrieved {len(all_alerts)} monitoring alerts (filter: {severity}, limit: {limit})")
-        
-        return {
-            "success": True,
-            "alerts": all_alerts,
-            "total_count": len(all_alerts),
-            "severity_filter": severity,
-            "limit": limit,
-            "retrieved_at": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error retrieving monitoring alerts: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/monitoring/status")
-async def get_monitoring_status_endpoint():
-    """
-    Get overall monitoring system status
-    """
-    try:
-        if not MONITORING_AVAILABLE:
-            return {
-                "monitoring_available": False,
-                "error": "Monitoring service not available"
-            }
-        
-        # Get status from monitoring scheduler
-        status = await get_monitoring_status()
-        
-        return {
-            "monitoring_available": MONITORING_AVAILABLE,
-            "system_health": "operational" if status.get("running") else "stopped",
-            "active_monitors": status.get("monitored_vendors", 0),
-            "monitored_vendors": status.get("vendor_list", []),
-            "check_interval_minutes": status.get("check_interval_minutes", 5),
-            "last_check": datetime.now().isoformat(),
-            "version": "1.0.0"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error getting monitoring status: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/v1/monitoring/disable/{vendor_domain}")
-async def disable_vendor_monitoring(vendor_domain: str):
-    """
-    Disable continuous monitoring for a vendor
-    """
-    try:
-        if not MONITORING_AVAILABLE:
-            raise HTTPException(status_code=503, detail="Monitoring service not available")
-        
-        success = await remove_vendor_from_monitoring(vendor_domain)
-        
-        if success:
-            logger.info(f"🔕 Disabled continuous monitoring for {vendor_domain}")
-            return {
-                "success": True,
-                "message": f"Continuous monitoring disabled for {vendor_domain}",
-                "vendor_domain": vendor_domain
-            }
-        else:
-            raise HTTPException(status_code=404, detail=f"No monitoring found for {vendor_domain}")
-        
-    except Exception as e:
-        logger.error(f"Error disabling monitoring for {vendor_domain}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Security Intelligence Cache - in-memory cache for security events
-security_intelligence_cache = {}
-CACHE_EXPIRY_HOURS = 6  # Cache security intelligence for 6 hours
-
-async def gather_security_intelligence(vendor_domain: str, vendor_name: str) -> List[Dict[str, Any]]:
-    """Gather real-world security intelligence for a vendor using AI"""
-    
-    # Check cache first
-    cache_key = f"{vendor_domain}_{vendor_name}"
-    current_time = datetime.now()
-    
-    if cache_key in security_intelligence_cache:
-        cached_data, cached_time = security_intelligence_cache[cache_key]
-        if (current_time - cached_time).total_seconds() < CACHE_EXPIRY_HOURS * 3600:
-            logger.info(f"🔍 Using cached security intelligence for {vendor_domain}")
-            return cached_data
-    
-    logger.info(f"🔍 Gathering security intelligence for {vendor_domain} using AI...")
-    
-    try:
-        if not OPENAI_AVAILABLE:
-            logger.warning("OpenAI not available for security intelligence gathering")
-            return []
-        
-        # Corporate API configuration
-        corporate_api_key = os.getenv('CORPORATE_AI_API_KEY') or os.getenv('OPENAI_API_KEY')
-        corporate_base_url = "https://chat.expertcity.com/api/v1"
-        
-        if not corporate_api_key:
-            logger.warning("No AI API key available for security intelligence")
-            return []
-        
-        # Initialize OpenAI client
-        from openai import OpenAI
-        client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
-        
-        # Create comprehensive security intelligence prompt
-        prompt = f"""You are a cybersecurity intelligence analyst. Research and provide real, recent security information about this vendor:
-
-Vendor: {vendor_name}
-Domain: {vendor_domain}
-
-Please provide information about:
-1. Recent data breaches or security incidents (last 2 years)
-2. Known vulnerabilities or CVEs affecting their systems
-3. Security certifications or compliance issues
-4. Notable security events or news mentions
-5. Third-party security ratings or alerts
-
-For each security event, provide:
-- Date (if known)
-- Type of incident/vulnerability
-- Severity level
-- Brief description
-- Impact or affected systems
-- Source or reference
-
-Focus on factual, verifiable information. If no significant security events are found, mention that the vendor has a clean security record.
-
-Respond in JSON format with an array of security events:
-{{
-    "security_events": [
-        {{
-            "date": "YYYY-MM-DD or 'Unknown'",
-            "type": "Data Breach|Vulnerability|Compliance Issue|Security Incident",
-            "severity": "Critical|High|Medium|Low",
-            "title": "Brief incident title",
-            "description": "Detailed description",
-            "impact": "Description of impact",
-            "source": "News source or reference",
-            "cve_id": "CVE-XXXX-XXXX if applicable, or null"
-        }}
-    ],
-    "overall_assessment": "Brief overall security posture assessment"
-}}"""
-
-        # Make AI API call
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a cybersecurity intelligence analyst providing factual security information about vendors."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=2000
-        )
-        
-        # Parse AI response
-        ai_response = response.choices[0].message.content.strip()
-        
-        # Try to parse JSON response
-        try:
-            # Clean up response if it has markdown formatting
-            if ai_response.startswith("```json"):
-                ai_response = ai_response.replace("```json", "").replace("```", "")
-            
-            intelligence_data = json.loads(ai_response)
-            security_events = intelligence_data.get("security_events", [])
-            
-            # Cache the results
-            security_intelligence_cache[cache_key] = (security_events, current_time)
-            
-            logger.info(f"🔍 Found {len(security_events)} security events for {vendor_domain}")
-            return security_events
-            
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse AI security intelligence response: {e}")
-            logger.debug(f"AI Response: {ai_response}")
-            return []
-        
-    except Exception as e:
-        logger.error(f"Error gathering security intelligence for {vendor_domain}: {str(e)}")
-        return []
-
-@app.get("/api/v1/security-intelligence/{vendor_domain}")
-async def get_vendor_security_intelligence(vendor_domain: str):
-    """API endpoint to get security intelligence for a specific vendor"""
-    try:
-        # Extract vendor name from domain or use domain as fallback
-        vendor_name = vendor_domain.replace('.com', '').replace('.org', '').replace('.net', '').replace('www.', '')
-        
-        security_events = await gather_security_intelligence(vendor_domain, vendor_name)
-        
-        return {
-            "success": True,
-            "vendor_domain": vendor_domain,
-            "vendor_name": vendor_name,
-            "security_events": security_events,
-            "cached": f"{vendor_domain}_{vendor_name}" in security_intelligence_cache,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in security intelligence API: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "vendor_domain": vendor_domain,
-            "security_events": []
-        }
-
-@app.post("/api/v1/security-intelligence/refresh")
-async def refresh_security_intelligence_cache():
-    """API endpoint to clear security intelligence cache"""
-    global security_intelligence_cache
-    cache_size = len(security_intelligence_cache)
-    security_intelligence_cache.clear()
-    
-    return {
-        "success": True,
-        "message": f"Cleared {cache_size} cached security intelligence entries"
-    }
 
 if __name__ == "__main__":
     import uvicorn

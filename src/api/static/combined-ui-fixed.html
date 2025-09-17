@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vendor Risk Assessment System - Complete Interface</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="/static/api-config.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .risk-low { background-color: #10b981; }
+        .risk-medium { background-color: #f59e0b; }
+        .risk-high { background-color: #ef4444; }
+        .regulation-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            margin: 2px;
+            background-color: #eff6ff;
+            color: #1e40af;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .tab-content { 
+            display: none; 
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+        .dropdown-content { 
+            display: none; 
+            background: white; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 6px; 
+            margin-top: 8px; 
+            padding: 12px; 
+        }
+        .clickable-row { 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+        }
+        .clickable-row:hover { 
+            background-color: rgba(0, 0, 0, 0.05); 
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b">
+        <div class="container mx-auto">
+            <div class="flex justify-between items-center py-4 px-6">
+                <h1 class="text-2xl font-bold text-gray-800">
+                    <i class="fas fa-shield-alt text-blue-600 mr-2"></i>
+                    Vendor Risk Assessment AI
+                </h1>
+                <div class="text-sm text-gray-500" id="headerStatus">Ready</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="bg-white border-b">
+        <div class="container mx-auto px-6">
+            <div class="flex space-x-0">
+                <button id="singleTab" onclick="showTab('single')" 
+                    class="px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300">
+                    <i class="fas fa-search mr-2"></i>Single Assessment
+                </button>
+                <button id="bulkTab" onclick="showTab('bulk')" 
+                    class="px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300">
+                    <i class="fas fa-list mr-2"></i>Bulk Assessment
+                </button>
+                <button id="dashboardTab" onclick="showTab('dashboard')" 
+                    class="px-6 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50 rounded-t-lg">
+                    <i class="fas fa-chart-line mr-2"></i>Monitoring & Dashboard
+                </button>
+                <button id="trustcenterTab" onclick="showTab('trustcenter')" 
+                    class="px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300">
+                    <i class="fas fa-building mr-2"></i>Trust Center Access
+                </button>
+                <button id="historyTab" onclick="showTab('history')" 
+                    class="px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300">
+                    <i class="fas fa-history mr-2"></i>Assessment History
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Contents -->
+    <div class="container mx-auto px-6 py-8">
+        
+        <!-- Single Assessment Tab -->
+        <div id="singleAssessment" class="tab-content">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-xl font-semibold mb-4">Single Vendor Assessment</h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Vendor Domain or Name</label>
+                    <input type="text" id="singleVendorInput" class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                           placeholder="Enter vendor domain (e.g., slack.com) or company name">
+                </div>
+                <button onclick="startSingleAssessment()" id="singleAssessBtn" 
+                    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    <i class="fas fa-search mr-2"></i>Start Assessment
+                </button>
+                <div id="singleResults" class="mt-6"></div>
+            </div>
+        </div>
+
+        <!-- Bulk Assessment Tab -->
+        <div id="bulkAssessment" class="tab-content">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-xl font-semibold mb-4">Bulk Vendor Assessment</h2>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Upload CSV File</label>
+                    <input type="file" id="bulkFileInput" accept=".csv" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <button onclick="startBulkAssessment()" id="bulkAssessBtn" 
+                    class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    <i class="fas fa-upload mr-2"></i>Start Bulk Assessment
+                </button>
+                <div id="bulkResults" class="mt-6"></div>
+            </div>
+        </div>
+
+        <!-- Enhanced Monitoring Dashboard Tab -->
+        <div id="dashboardAssessment" class="tab-content active">
+            
+            <!-- Gradient Header -->
+            <div class="bg-gradient-to-r from-blue-600 to-purple-700 rounded-lg p-6 mb-6 text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-2">
+                            <i class="fas fa-chart-line mr-2"></i>Enhanced Monitoring Dashboard
+                        </h2>
+                        <p class="text-blue-100">Real-time vendor risk monitoring with AI-powered alerts</p>
+                    </div>
+                    <div class="text-right">
+                        <button onclick="refreshMonitoringData()" class="bg-white bg-opacity-20 text-white px-4 py-2 rounded hover:bg-opacity-30 text-sm">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                        <div id="lastMonitoringUpdate" class="text-xs text-blue-200 mt-2">Last updated: Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-building text-2xl text-blue-500"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Monitored Vendors</p>
+                            <p id="statsMonitoredVendors" class="text-2xl font-bold text-gray-900">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-exclamation-triangle text-2xl text-red-500"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Active Alerts</p>
+                            <p id="statsActiveAlerts" class="text-2xl font-bold text-gray-900">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-chart-line text-2xl text-yellow-500"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Recent Changes</p>
+                            <p id="statsRecentChanges" class="text-2xl font-bold text-gray-900">0</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow-sm p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-star text-2xl text-green-500"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm font-medium text-gray-500">Average Score</p>
+                            <p id="statsAverageScore" class="text-2xl font-bold text-gray-900">N/A</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Dashboard Content -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Monitored Vendors -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-lg shadow-sm">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-900">
+                                <i class="fas fa-building text-blue-500 mr-2"></i>Monitored Vendors
+                            </h3>
+                        </div>
+                        <div class="p-6">
+                            <div id="monitoredVendorsList" class="space-y-4">
+                                <!-- Vendor list will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Alerts & Score Changes -->
+                <div class="lg:col-span-2 space-y-6">
+                    
+                    <!-- Recent Alerts -->
+                    <div class="bg-white rounded-lg shadow-sm">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-900">
+                                <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>Recent Alerts
+                                <span class="text-sm font-normal text-gray-500 ml-2">(Click for details)</span>
+                            </h3>
+                        </div>
+                        <div class="p-6">
+                            <div id="recentAlertsList" class="space-y-3">
+                                <!-- Alerts will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Score Changes -->
+                    <div class="bg-white rounded-lg shadow-sm">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-900">
+                                <i class="fas fa-chart-line text-yellow-500 mr-2"></i>Recent Score Changes
+                                <span class="text-sm font-normal text-gray-500 ml-2">(Click for analysis)</span>
+                            </h3>
+                        </div>
+                        <div class="p-6">
+                            <div id="scoreChangesList" class="space-y-3">
+                                <!-- Score changes will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trust Center Tab -->
+        <div id="trustcenterAssessment" class="tab-content">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-xl font-semibold mb-4">Trust Center Access</h2>
+                <p class="text-gray-600">Trust center functionality would be here.</p>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="historyAssessment" class="tab-content">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-xl font-semibold mb-4">Assessment History</h2>
+                <p class="text-gray-600">History functionality would be here.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('🚀 Enhanced Monitoring Dashboard Loading...');
+
+        // Enhanced monitoring data structure
+        const enhancedMonitoringData = {
+            vendors: [],
+            alerts: [],
+            scoreChanges: []
+        };
+
+        // Tab switching function
+        function showTab(tabName) {
+            console.log('🔄 Switching to tab: ' + tabName);
+            
+            // Hide all tab contents
+            const tabs = document.querySelectorAll('.tab-content');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
+            
+            // Remove active state from all tabs
+            const tabButtons = document.querySelectorAll('button[id$="Tab"]');
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].className = 'px-6 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300';
+            }
+            
+            // Show selected tab
+            const targetTab = document.getElementById(tabName + 'Assessment');
+            if (targetTab) {
+                targetTab.classList.add('active');
+                console.log('✅ Activated tab: ' + tabName + 'Assessment');
+            }
+            
+            // Set active state for selected tab
+            const activeButton = document.getElementById(tabName + 'Tab');
+            if (activeButton) {
+                activeButton.className = 'px-6 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50 rounded-t-lg';
+            }
+            
+            // Load enhanced monitoring data when dashboard tab is shown
+            if (tabName === 'dashboard') {
+                console.log('🔄 Initializing enhanced monitoring dashboard...');
+                loadEnhancedMonitoringData();
+            }
+        }
+
+        // Toggle function for alert details
+        function toggleAlertDetails(alertId) {
+            console.log('🔽 Toggling alert details for: ' + alertId);
+            const element = document.getElementById('details-' + alertId);
+            if (element) {
+                if (element.style.display === 'none' || element.style.display === '') {
+                    element.style.display = 'block';
+                    console.log('✅ Showed details for: ' + alertId);
+                } else {
+                    element.style.display = 'none'; 
+                    console.log('✅ Hidden details for: ' + alertId);
+                }
+            } else {
+                console.log('❌ Element not found: details-' + alertId);
+            }
+        }
+
+        // Vendor logo handling
+        function getVendorLogo(domain) {
+            const cleanDomain = domain.toLowerCase().replace(/^www\./, '');
+            return 'https://logo.clearbit.com/' + cleanDomain + '?size=32&format=png';
+        }
+
+        function handleLogoError(img, domain) {
+            const cleanDomain = domain.toLowerCase().replace(/^www\./, '');
+            img.src = 'https://icons.duckduckgo.com/ip3/' + cleanDomain + '.ico';
+        }
+
+        // Load enhanced monitoring data
+        function loadEnhancedMonitoringData() {
+            console.log('🔄 Loading enhanced monitoring data...');
+            loadDemoData();
+            updateMonitoringStats();
+            updateLastMonitoringTime();
+        }
+
+        // Demo data loading
+        function loadDemoData() {
+            console.log('📊 Loading demo data...');
+            
+            // Demo vendors
+            const demoVendors = [
+                {
+                    name: 'Slack Technologies',
+                    domain: 'slack.com',
+                    current_score: 72,
+                    last_check: new Date(Date.now() - 2 * 60000)
+                },
+                {
+                    name: 'Zoom Video Communications',
+                    domain: 'zoom.us', 
+                    current_score: 89,
+                    last_check: new Date(Date.now() - 1 * 60000)
+                },
+                {
+                    name: 'Microsoft Corporation',
+                    domain: 'microsoft.com',
+                    current_score: 94,
+                    last_check: new Date(Date.now() - 5 * 60000)
+                }
+            ];
+
+            // Demo alerts
+            const demoAlerts = [
+                {
+                    title: 'Security Alert - Slack Technologies',
+                    summary: 'New security incident reported in trust center',
+                    description: 'A new security incident was discovered during automated monitoring. The AI detected mentions of a potential data breach in recent security advisories published on their trust center.',
+                    trigger: 'Keyword match on "security incident" in trust center updates',
+                    severity: 'High',
+                    source: 'Trust center monitoring',
+                    impact: 'Potential data exposure risk',
+                    recommended_action: 'Review security documentation, assess impact on your organization, and consider reaching out to vendor for clarification on incident scope and remediation steps.',
+                    timestamp: new Date(Date.now() - 5 * 60000)
+                },
+                {
+                    title: 'Compliance Update - Microsoft Corporation',
+                    summary: 'SOC 2 Type II certification renewed',
+                    description: 'Microsoft has successfully renewed their SOC 2 Type II certification with no identified control deficiencies.',
+                    trigger: 'Compliance certification monitoring',
+                    severity: 'Info', 
+                    source: 'Compliance tracking',
+                    impact: 'Positive compliance standing',
+                    recommended_action: 'Update vendor compliance records and acknowledge improved security posture.',
+                    timestamp: new Date(Date.now() - 15 * 60000)
+                }
+            ];
+
+            // Demo score changes
+            const demoChanges = [
+                {
+                    vendor_name: 'Slack Technologies',
+                    old_score: 78,
+                    new_score: 72,
+                    description: 'Risk score decreased by 6 points due to newly discovered security concerns and delayed incident response communications.',
+                    impact_level: 'Moderate',
+                    factors: [
+                        'Security incident discovery (-4 points)',
+                        'Trust center communication delays (-2 points)'
+                    ],
+                    timestamp: new Date(Date.now() - 10 * 60000)
+                },
+                {
+                    vendor_name: 'Microsoft Corporation',
+                    old_score: 91,
+                    new_score: 94,
+                    description: 'Risk score improved by 3 points following successful SOC 2 Type II renewal and enhanced security documentation.',
+                    impact_level: 'Low',
+                    factors: [
+                        'SOC 2 Type II certification renewal (+2 points)',
+                        'Enhanced security documentation (+1 point)'
+                    ],
+                    timestamp: new Date(Date.now() - 20 * 60000)
+                }
+            ];
+
+            enhancedMonitoringData.vendors = demoVendors;
+            enhancedMonitoringData.alerts = demoAlerts;
+            enhancedMonitoringData.scoreChanges = demoChanges;
+
+            displayEnhancedVendors(demoVendors);
+            displayEnhancedAlerts(demoAlerts);
+            displayEnhancedScoreChanges(demoChanges);
+        }
+
+        // Display functions
+        function displayEnhancedVendors(vendors) {
+            let html = '';
+            
+            for (let i = 0; i < vendors.length; i++) {
+                const vendor = vendors[i];
+                const logoUrl = getVendorLogo(vendor.domain);
+                const scoreClass = getScoreColorClass(vendor.current_score);
+                const timeAgo = getTimeAgo(vendor.last_check);
+                
+                html += '<div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors">';
+                html += '  <div class="flex items-center">';
+                html += '    <img src="' + logoUrl + '" alt="' + vendor.name + '" class="w-10 h-10 rounded-lg mr-4 border" ';
+                html += '         onerror="handleLogoError(this, \'' + vendor.domain + '\')">';
+                html += '    <div>';
+                html += '      <div class="font-medium text-gray-900">' + vendor.name + '</div>';
+                html += '      <div class="text-sm text-gray-500">' + vendor.domain + '</div>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '  <div class="text-right">';
+                html += '    <div class="font-semibold ' + scoreClass + ' text-lg">Score: ' + (vendor.current_score || 'N/A') + '</div>';
+                html += '    <div class="text-xs text-gray-500">Last checked: ' + timeAgo + '</div>';
+                html += '  </div>';
+                html += '</div>';
+            }
+            
+            document.getElementById('monitoredVendorsList').innerHTML = html;
+        }
+
+        function displayEnhancedAlerts(alerts) {
+            let html = '';
+            
+            for (let i = 0; i < alerts.length; i++) {
+                const alert = alerts[i];
+                const alertId = 'alert' + i;
+                const timeAgo = getTimeAgo(alert.timestamp);
+                const severityClass = getSeverityClass(alert.severity);
+                
+                html += '<div class="p-4 ' + severityClass.bg + ' border ' + severityClass.border + ' rounded-lg clickable-row mb-3" onclick="toggleAlertDetails(\'' + alertId + '\')">';
+                html += '  <div class="flex items-center justify-between">';
+                html += '    <div class="flex-1">';
+                html += '      <div class="flex items-center mb-1">';
+                html += '        <i class="fas fa-exclamation-triangle ' + severityClass.icon + ' mr-2"></i>';
+                html += '        <div class="font-medium ' + severityClass.text + '">' + alert.title + '</div>';
+                html += '      </div>';
+                html += '      <div class="text-sm ' + severityClass.subtext + '">' + alert.summary + '</div>';
+                html += '    </div>';
+                html += '    <div class="text-xs ' + severityClass.time + ' text-right">';
+                html += '      <div>' + timeAgo + '</div>';
+                html += '      <div class="mt-1"><i class="fas fa-chevron-down"></i></div>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '  <div id="details-' + alertId + '" class="dropdown-content">';
+                html += '    <h5 class="font-medium text-gray-800 mb-3 flex items-center">';
+                html += '      <i class="fas fa-info-circle text-blue-500 mr-2"></i>Alert Details';
+                html += '    </h5>';
+                html += '    <p class="text-sm text-gray-600 mb-3">' + alert.description + '</p>';
+                html += '    <div class="bg-gray-50 p-4 rounded-lg">';
+                html += '      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">';
+                html += '        <div><strong>Trigger:</strong><br>' + alert.trigger + '</div>';
+                html += '        <div><strong>Severity:</strong><br>' + alert.severity + '</div>';
+                html += '        <div><strong>Source:</strong><br>' + alert.source + '</div>';
+                html += '        <div><strong>Impact:</strong><br>' + (alert.impact || 'Under evaluation') + '</div>';
+                html += '      </div>';
+                html += '      <div class="mt-3 pt-3 border-t border-gray-200">';
+                html += '        <strong>Recommended Action:</strong>';
+                html += '        <p class="mt-1">' + alert.recommended_action + '</p>';
+                html += '      </div>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '</div>';
+            }
+            
+            document.getElementById('recentAlertsList').innerHTML = html;
+        }
+
+        function displayEnhancedScoreChanges(changes) {
+            let html = '';
+            
+            for (let i = 0; i < changes.length; i++) {
+                const change = changes[i];
+                const changeId = 'score' + i;
+                const timeAgo = getTimeAgo(change.timestamp);
+                const changeAmount = change.new_score - change.old_score;
+                const changeDirection = changeAmount > 0 ? '↑' : '↓';
+                const changeClass = getChangeColorClass(changeAmount);
+                
+                html += '<div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg clickable-row mb-3" onclick="toggleAlertDetails(\'' + changeId + '\')">';
+                html += '  <div class="flex items-center justify-between">';
+                html += '    <div class="flex-1">';
+                html += '      <div class="flex items-center mb-1">';
+                html += '        <i class="fas fa-exchange-alt text-yellow-600 mr-2"></i>';
+                html += '        <div class="font-medium text-yellow-800">Score Change - ' + change.vendor_name + '</div>';
+                html += '      </div>';
+                html += '      <div class="text-sm text-yellow-600">';
+                html += '        Score changed from <strong>' + change.old_score + '</strong> to <strong class="' + changeClass + '">' + change.new_score + '</strong> ';
+                html += '        <span class="' + changeClass + '">(' + changeDirection + Math.abs(changeAmount) + ' points)</span>';
+                html += '      </div>';
+                html += '    </div>';
+                html += '    <div class="text-xs text-yellow-500 text-right">';
+                html += '      <div>' + timeAgo + '</div>';
+                html += '      <div class="mt-1"><i class="fas fa-chevron-down"></i></div>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '  <div id="details-' + changeId + '" class="dropdown-content">';
+                html += '    <h5 class="font-medium text-gray-800 mb-3 flex items-center">';
+                html += '      <i class="fas fa-chart-line text-yellow-500 mr-2"></i>Score Change Analysis';
+                html += '    </h5>';
+                html += '    <p class="text-sm text-gray-600 mb-3">' + change.description + '</p>';
+                html += '    <div class="bg-gray-50 p-4 rounded-lg">';
+                html += '      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">';
+                html += '        <div><strong>Previous Score:</strong><br><span class="text-lg font-medium">' + change.old_score + '/100</span></div>';
+                html += '        <div><strong>New Score:</strong><br><span class="text-lg font-medium ' + changeClass + '">' + change.new_score + '/100</span></div>';
+                html += '        <div><strong>Change:</strong><br><span class="font-medium ' + changeClass + '">' + changeDirection + Math.abs(changeAmount) + ' points</span></div>';
+                html += '        <div><strong>Impact Level:</strong><br>' + (change.impact_level || 'Moderate') + '</div>';
+                html += '      </div>';
+                if (change.factors && change.factors.length > 0) {
+                    html += '      <div class="pt-3 border-t border-gray-200">';
+                    html += '        <strong>Contributing Factors:</strong>';
+                    html += '        <ul class="list-disc list-inside text-sm mt-2 space-y-1">';
+                    for (let j = 0; j < change.factors.length; j++) {
+                        html += '          <li>' + change.factors[j] + '</li>';
+                    }
+                    html += '        </ul>';
+                    html += '      </div>';
+                }
+                html += '    </div>';
+                html += '  </div>';
+                html += '</div>';
+            }
+            
+            document.getElementById('scoreChangesList').innerHTML = html;
+        }
+
+        // Utility functions
+        function getScoreColorClass(score) {
+            if (!score) return 'text-gray-500';
+            if (score >= 85) return 'text-green-600';
+            if (score >= 70) return 'text-yellow-600';
+            return 'text-red-600';
+        }
+
+        function getChangeColorClass(changeAmount) {
+            if (changeAmount > 0) return 'text-green-600';
+            if (changeAmount < 0) return 'text-red-600';
+            return 'text-gray-600';
+        }
+
+        function getSeverityClass(severity) {
+            switch (severity.toLowerCase()) {
+                case 'high':
+                    return {
+                        bg: 'bg-red-50',
+                        border: 'border-red-200', 
+                        text: 'text-red-800',
+                        subtext: 'text-red-600',
+                        time: 'text-red-500',
+                        icon: 'text-red-500'
+                    };
+                case 'medium':
+                    return {
+                        bg: 'bg-yellow-50',
+                        border: 'border-yellow-200',
+                        text: 'text-yellow-800',
+                        subtext: 'text-yellow-600',
+                        time: 'text-yellow-500',
+                        icon: 'text-yellow-500'
+                    };
+                case 'info':
+                    return {
+                        bg: 'bg-blue-50',
+                        border: 'border-blue-200',
+                        text: 'text-blue-800',
+                        subtext: 'text-blue-600',
+                        time: 'text-blue-500',
+                        icon: 'text-blue-500'
+                    };
+                default:
+                    return {
+                        bg: 'bg-gray-50',
+                        border: 'border-gray-200',
+                        text: 'text-gray-800',
+                        subtext: 'text-gray-600',
+                        time: 'text-gray-500',
+                        icon: 'text-gray-400'
+                    };
+            }
+        }
+
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return 'Unknown';
+            const now = new Date();
+            const time = new Date(timestamp);
+            const diffMs = now - time;
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return diffMins + ' min ago';
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return diffHours + ' hr ago';
+            const diffDays = Math.floor(diffHours / 24);
+            return diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
+        }
+
+        // Update monitoring statistics
+        function updateMonitoringStats() {
+            const vendorCount = enhancedMonitoringData.vendors.length;
+            const alertCount = enhancedMonitoringData.alerts.length;
+            const changeCount = enhancedMonitoringData.scoreChanges.length;
+            
+            let totalScore = 0;
+            for (let i = 0; i < enhancedMonitoringData.vendors.length; i++) {
+                if (enhancedMonitoringData.vendors[i].current_score) {
+                    totalScore += enhancedMonitoringData.vendors[i].current_score;
+                }
+            }
+            const avgScore = vendorCount > 0 ? Math.round(totalScore / vendorCount) : 0;
+            
+            document.getElementById('statsMonitoredVendors').textContent = vendorCount;
+            document.getElementById('statsActiveAlerts').textContent = alertCount;
+            document.getElementById('statsRecentChanges').textContent = changeCount;
+            document.getElementById('statsAverageScore').textContent = avgScore > 0 ? avgScore : 'N/A';
+        }
+
+        function updateLastMonitoringTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            document.getElementById('lastMonitoringUpdate').textContent = 'Last updated: ' + timeString;
+        }
+
+        function refreshMonitoringData() {
+            console.log('🔄 Refreshing enhanced monitoring data...');
+            loadEnhancedMonitoringData();
+        }
+
+        // Placeholder functions for other tabs
+        function startSingleAssessment() {
+            console.log('Single assessment clicked');
+            alert('Single assessment functionality would be implemented here');
+        }
+
+        function startBulkAssessment() {
+            console.log('Bulk assessment clicked');
+            alert('Bulk assessment functionality would be implemented here');
+        }
+
+        // Make functions globally available
+        window.showTab = showTab;
+        window.toggleAlertDetails = toggleAlertDetails;
+        window.refreshMonitoringData = refreshMonitoringData;
+        window.handleLogoError = handleLogoError;
+        window.startSingleAssessment = startSingleAssessment;
+        window.startBulkAssessment = startBulkAssessment;
+
+        // Initialize
+        console.log('✅ Enhanced monitoring dashboard loaded successfully');
+        
+        // Auto-load data if starting on dashboard tab
+        if (document.getElementById('dashboardAssessment').classList.contains('active')) {
+            loadEnhancedMonitoringData();
+        }
+    </script>
+</body>
+</html>

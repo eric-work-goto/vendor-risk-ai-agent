@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Super Simple Test</title>
+</head>
+<body>
+    <h1>JavaScript Test Page</h1>
+    <button id="testBtn" onclick="testFunction()">Click Me!</button>
+    <p id="output">Click the button to test JavaScript...</p>
+
+    <script>
+        function testFunction() {
+            document.getElementById('output').innerHTML = '✅ JavaScript is working! ' + new Date().toLocaleTimeString();
+            alert('Success! JavaScript is working perfectly.');
+        }
+        
+        // Also test console logging
+        console.log('🚀 Script loaded successfully');
+        
+        // Test window functions
+        window.testFunction = testFunction;
+        
+        // Add some debug info
+        console.log('Location:', window.location.href);
+        console.log('User Agent:', navigator.userAgent);
+    </script>
+</body>
+</html>

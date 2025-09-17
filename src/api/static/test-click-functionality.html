@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Click Functionality</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-8">
+        <h1 class="text-2xl font-bold mb-6">🧪 JavaScript Click Test</h1>
+        
+        <!-- Test Basic Click -->
+        <div class="mb-6 p-4 bg-white rounded-lg border">
+            <h2 class="text-lg font-semibold mb-3">Test 1: Basic Click Function</h2>
+            <button id="testButton" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Click Me to Test
+            </button>
+            <div id="testResult" class="mt-2 text-sm text-gray-600"></div>
+        </div>
+        
+        <!-- Test Tab Switching -->
+        <div class="mb-6 p-4 bg-white rounded-lg border">
+            <h2 class="text-lg font-semibold mb-3">Test 2: Tab Switching</h2>
+            <div class="flex space-x-2 mb-4">
+                <button onclick="showTab('tab1')" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Tab 1
+                </button>
+                <button onclick="showTab('tab2')" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                    Tab 2
+                </button>
+            </div>
+            <div id="tab1Content" class="tab-content p-4 bg-green-50 rounded active">
+                <p>This is Tab 1 content</p>
+            </div>
+            <div id="tab2Content" class="tab-content p-4 bg-purple-50 rounded hidden">
+                <p>This is Tab 2 content</p>
+            </div>
+        </div>
+        
+        <!-- Test Alert Dropdown -->
+        <div class="mb-6 p-4 bg-white rounded-lg border">
+            <h2 class="text-lg font-semibold mb-3">Test 3: Dropdown Toggle</h2>
+            <div class="p-4 bg-red-50 border border-red-200 rounded-lg cursor-pointer" onclick="toggleDropdown('alert1')">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <i class="fas fa-exclamation-triangle text-red-500 mr-2"></i>
+                        <span class="font-medium text-red-800">Sample Security Alert</span>
+                    </div>
+                    <div class="text-xs text-red-500">
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                </div>
+                <div id="details-alert1" class="mt-3 p-3 bg-white rounded border hidden">
+                    <h5 class="font-medium mb-2">Alert Details</h5>
+                    <p class="text-sm text-gray-600">This is a detailed explanation that appears when you click the alert.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="jsStatus" class="text-center text-gray-500 mt-8"></div>
+    </div>
+
+    <script>
+        // Test if JavaScript is working
+        console.log('🧪 JavaScript test page loaded');
+        
+        // Update status
+        document.getElementById('jsStatus').innerHTML = '✅ JavaScript is working!';
+        
+        // Test 1: Basic click
+        document.getElementById('testButton').addEventListener('click', function() {
+            const result = document.getElementById('testResult');
+            result.innerHTML = '✅ Click event worked! Time: ' + new Date().toLocaleTimeString();
+            result.className = 'mt-2 text-sm text-green-600 font-medium';
+            console.log('✅ Button click successful');
+        });
+        
+        // Test 2: Tab switching
+        function showTab(tabName) {
+            console.log('🔄 Switching to tab: ' + tabName);
+            
+            // Hide all tabs
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(function(tab) {
+                tab.classList.add('hidden');
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            const targetTab = document.getElementById(tabName + 'Content');
+            if (targetTab) {
+                targetTab.classList.remove('hidden');
+                targetTab.classList.add('active');
+                console.log('✅ Tab switch successful: ' + tabName);
+            }
+        }
+        
+        // Test 3: Dropdown toggle
+        function toggleDropdown(alertId) {
+            console.log('🔽 Toggling dropdown for: ' + alertId);
+            const element = document.getElementById('details-' + alertId);
+            if (element) {
+                if (element.classList.contains('hidden')) {
+                    element.classList.remove('hidden');
+                    console.log('✅ Dropdown opened: ' + alertId);
+                } else {
+                    element.classList.add('hidden');
+                    console.log('✅ Dropdown closed: ' + alertId);
+                }
+            }
+        }
+        
+        // Make functions global
+        window.showTab = showTab;
+        window.toggleDropdown = toggleDropdown;
+        
+        console.log('🎯 All test functions loaded successfully');
+    </script>
+</body>
+</html>
