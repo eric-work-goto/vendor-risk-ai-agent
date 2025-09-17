@@ -1,0 +1,14 @@
+{
+  "github.com": {
+    "vendor_domain": "github.com",
+    "vendor_name": "GitHub Inc",
+    "assessment_id": null,
+    "enabled": true,
+    "added_at": "2025-09-17T09:20:06.933312",
+    "last_checked": null,
+    "next_check": "2025-09-17T14:20:06.933312",
+    "check_count": 0,
+    "alert_count": 0,
+    "status": "active"
+  }
+}

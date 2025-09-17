@@ -41,6 +41,32 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
+# Import monitoring services
+try:
+    from ..services.ai_monitoring import monitor_vendor_ai
+    from ..services.monitoring_scheduler import (
+        add_vendor_to_monitoring,
+        remove_vendor_from_monitoring,
+        get_monitoring_status,
+        get_vendor_monitoring_alerts,
+        get_all_monitoring_alerts
+    )
+    MONITORING_AVAILABLE = True
+except ImportError:
+    MONITORING_AVAILABLE = False
+    async def monitor_vendor_ai(domain, name=None):
+        return []
+    async def add_vendor_to_monitoring(domain, name=None, assessment_id=None):
+        return False
+    async def remove_vendor_from_monitoring(domain):
+        return False
+    async def get_monitoring_status():
+        return {"error": "Monitoring not available"}
+    async def get_vendor_monitoring_alerts(domain, limit=50):
+        return []
+    async def get_all_monitoring_alerts(limit=50):
+        return []
+
 # Try to import openai, fall back gracefully if not available
 try:
     import openai
@@ -616,6 +642,7 @@ class CreateAssessmentRequest(BaseModel):
     auto_trust_center: bool = False
     enhanced_assessment: bool = False  # Enable comprehensive industry-standard assessment
     assessment_mode: str = "business_risk"  # "technical_due_diligence" or "business_risk"
+    enable_continuous_monitoring: bool = False  # Enable continuous monitoring for this vendor
 
     @validator('vendor_domain')
     def validate_vendor_domain(cls, v):
@@ -812,6 +839,58 @@ async def serve_combined_ui():
                 <body>
                     <h1>🚫 Combined UI Not Found</h1>
                     <p>The combined-ui.html file was not found in the static directory.</p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+            </html>
+            """,
+            status_code=404
+        )
+
+@app.get("/clean-monitoring", response_class=HTMLResponse)
+async def serve_clean_monitoring():
+    """Serve the Clean Monitoring Dashboard (no template literals)"""
+    clean_monitoring_path = static_path / "clean-monitoring.html"
+    if clean_monitoring_path.exists():
+        with open(clean_monitoring_path, 'r', encoding='utf-8') as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    else:
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Clean Monitoring - Not Found</title>
+                    <style>body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }</style>
+                </head>
+                <body>
+                    <h1>🚫 Clean Monitoring Dashboard Not Found</h1>
+                    <p>The clean-monitoring.html file was not found in the static directory.</p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+            </html>
+            """,
+            status_code=404
+        )
+
+@app.get("/monitoring-dashboard", response_class=HTMLResponse)
+async def serve_monitoring_dashboard():
+    """Serve the Enhanced Monitoring Dashboard"""
+    enhanced_monitoring_path = static_path / "enhanced-monitoring.html"
+    if enhanced_monitoring_path.exists():
+        with open(enhanced_monitoring_path, 'r', encoding='utf-8') as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    else:
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Monitoring Dashboard - Not Found</title>
+                    <style>body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }</style>
+                </head>
+                <body>
+                    <h1>🚫 Monitoring Dashboard Not Found</h1>
+                    <p>The enhanced-monitoring.html file was not found in the static directory.</p>
                     <p><a href="/">← Back to Home</a></p>
                 </body>
             </html>
@@ -4901,6 +4980,18 @@ async def run_comprehensive_real_assessment(assessment_id: str, request_data: Cr
         
         logger.info(f"🎉 Comprehensive real assessment completed for {vendor_domain}")
         
+        # Check if continuous monitoring should be enabled
+        if request_data.enable_continuous_monitoring:
+            try:
+                vendor_name = assessment_results[assessment_id].get("vendor_name", vendor_domain.split('.')[0].title())
+                success = await add_vendor_to_monitoring(vendor_domain, vendor_name, assessment_id)
+                if success:
+                    logger.info(f"🔄 Added {vendor_domain} to continuous monitoring")
+                else:
+                    logger.warning(f"⚠️ Failed to add {vendor_domain} to continuous monitoring")
+            except Exception as e:
+                logger.error(f"❌ Error adding vendor to monitoring: {str(e)}")
+        
         # Send completion email if requested
         if request_data.requester_email:
             try:
@@ -5333,6 +5424,18 @@ async def run_mock_assessment(assessment_id: str, request_data: CreateAssessment
                 assessment_storage[assessment_id]["risk_score"] = risk_score
         
         logger.info(f"✅ Assessment {assessment_id} completed successfully")
+        
+        # Check if continuous monitoring should be enabled
+        if request_data.enable_continuous_monitoring:
+            try:
+                vendor_name = assessment_results[assessment_id].get("vendor_name", vendor_domain.split('.')[0].title())
+                success = await add_vendor_to_monitoring(vendor_domain, vendor_name, assessment_id)
+                if success:
+                    logger.info(f"🔄 Added {vendor_domain} to continuous monitoring")
+                else:
+                    logger.warning(f"⚠️ Failed to add {vendor_domain} to continuous monitoring")
+            except Exception as e:
+                logger.error(f"❌ Error adding vendor to monitoring: {str(e)}")
         
         # Send assessment completion email
         try:
@@ -6017,6 +6120,7 @@ async def create_assessment(request: CreateAssessmentRequest):
             "vendor_name": vendor_domain.split('.')[0].title(),  # Generate name from domain
             "requester_email": requester_email,
             "auto_trust_center": auto_trust_center,
+            "enable_continuous_monitoring": request.enable_continuous_monitoring,
             "started_at": datetime.now().isoformat(),
             "results": None
         }
@@ -6033,6 +6137,7 @@ async def create_assessment(request: CreateAssessmentRequest):
             "regulations": regulations,
             "business_criticality": business_criticality,
             "auto_trust_center": auto_trust_center,
+            "enable_continuous_monitoring": request.enable_continuous_monitoring,
             "created_at": datetime.now().isoformat(),
             "results": None
         }
@@ -6093,10 +6198,16 @@ async def get_assessment_history():
                 "id": assessment_id,
                 "vendor_name": vendor_name[:100],  # Limit length
                 "vendor_domain": vendor_domain[:100],  # Limit length
+                "domain": vendor_domain[:100],  # Alias for frontend compatibility
                 "risk_score": risk_score,
+                "final_score": risk_score,  # Alias for frontend compatibility
                 "status": assessment_data.get("status", "unknown"),
                 "created_at": assessment_data.get("created_at", datetime.now().isoformat()),
                 "completed_at": assessment_data.get("completed_at"),
+                "assessment_date": assessment_data.get("created_at", datetime.now().isoformat()),  # Alias for frontend compatibility
+                "enable_continuous_monitoring": assessment_data.get("enable_continuous_monitoring", False),
+                "requester_email": assessment_data.get("requester_email"),
+                "regulations": assessment_data.get("regulations", []),
                 "results": results  # Include full results for display
             })
         
@@ -9156,6 +9267,306 @@ If no specific sub-processors are found, return an empty array. Be factual and o
             "domain": domain,
             "subprocessors": []
         }
+
+# ================== MONITORING ENDPOINTS ==================
+
+@app.post("/api/v1/monitoring/enable")
+async def enable_vendor_monitoring(vendor_domain: str, vendor_name: str = None, assessment_id: str = None):
+    """
+    Enable continuous monitoring for a vendor
+    """
+    try:
+        if not MONITORING_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Monitoring service not available")
+        
+        # Add to background monitoring
+        success = await add_vendor_to_monitoring(vendor_domain, vendor_name, assessment_id)
+        
+        if success:
+            logger.info(f"🔔 Enabled continuous monitoring for {vendor_domain}")
+            return {
+                "success": True,
+                "message": f"Continuous monitoring enabled for {vendor_domain}",
+                "vendor_domain": vendor_domain,
+                "vendor_name": vendor_name,
+                "status": "active"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to enable monitoring")
+        
+    except Exception as e:
+        logger.error(f"Error enabling monitoring for {vendor_domain}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/monitoring/check/{vendor_domain}")
+async def check_vendor_monitoring(vendor_domain: str, vendor_name: str = None):
+    """
+    Check for recent changes and alerts for a monitored vendor
+    """
+    try:
+        if not MONITORING_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Monitoring service not available")
+        
+        logger.info(f"🔍 Checking monitoring alerts for {vendor_domain}")
+        
+        # Get stored alerts for this vendor
+        stored_alerts = await get_vendor_monitoring_alerts(vendor_domain, limit=10)
+        
+        # Also perform a fresh AI check
+        fresh_alerts = await monitor_vendor_ai(vendor_domain, vendor_name)
+        
+        return {
+            "success": True,
+            "vendor_domain": vendor_domain,
+            "vendor_name": vendor_name,
+            "stored_alerts": stored_alerts,
+            "fresh_alerts": fresh_alerts,
+            "total_alerts": len(stored_alerts) + len(fresh_alerts),
+            "checked_at": datetime.now().isoformat(),
+            "status": "monitored"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking monitoring for {vendor_domain}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/monitoring/alerts")
+async def get_all_monitoring_alerts_endpoint(severity: str = None, limit: int = 50):
+    """
+    Get all recent monitoring alerts across all monitored vendors
+    """
+    try:
+        if not MONITORING_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Monitoring service not available")
+        
+        # Get all alerts from the monitoring system
+        all_alerts = await get_all_monitoring_alerts(limit)
+        
+        # Filter by severity if requested
+        if severity:
+            all_alerts = [alert for alert in all_alerts if alert.get('severity') == severity.lower()]
+        
+        logger.info(f"📊 Retrieved {len(all_alerts)} monitoring alerts (filter: {severity}, limit: {limit})")
+        
+        return {
+            "success": True,
+            "alerts": all_alerts,
+            "total_count": len(all_alerts),
+            "severity_filter": severity,
+            "limit": limit,
+            "retrieved_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error retrieving monitoring alerts: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/monitoring/status")
+async def get_monitoring_status_endpoint():
+    """
+    Get overall monitoring system status
+    """
+    try:
+        if not MONITORING_AVAILABLE:
+            return {
+                "monitoring_available": False,
+                "error": "Monitoring service not available"
+            }
+        
+        # Get status from monitoring scheduler
+        status = await get_monitoring_status()
+        
+        return {
+            "monitoring_available": MONITORING_AVAILABLE,
+            "system_health": "operational" if status.get("running") else "stopped",
+            "active_monitors": status.get("monitored_vendors", 0),
+            "monitored_vendors": status.get("vendor_list", []),
+            "check_interval_minutes": status.get("check_interval_minutes", 5),
+            "last_check": datetime.now().isoformat(),
+            "version": "1.0.0"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting monitoring status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/monitoring/disable/{vendor_domain}")
+async def disable_vendor_monitoring(vendor_domain: str):
+    """
+    Disable continuous monitoring for a vendor
+    """
+    try:
+        if not MONITORING_AVAILABLE:
+            raise HTTPException(status_code=503, detail="Monitoring service not available")
+        
+        success = await remove_vendor_from_monitoring(vendor_domain)
+        
+        if success:
+            logger.info(f"🔕 Disabled continuous monitoring for {vendor_domain}")
+            return {
+                "success": True,
+                "message": f"Continuous monitoring disabled for {vendor_domain}",
+                "vendor_domain": vendor_domain
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"No monitoring found for {vendor_domain}")
+        
+    except Exception as e:
+        logger.error(f"Error disabling monitoring for {vendor_domain}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Security Intelligence Cache - in-memory cache for security events
+security_intelligence_cache = {}
+CACHE_EXPIRY_HOURS = 6  # Cache security intelligence for 6 hours
+
+async def gather_security_intelligence(vendor_domain: str, vendor_name: str) -> List[Dict[str, Any]]:
+    """Gather real-world security intelligence for a vendor using AI"""
+    
+    # Check cache first
+    cache_key = f"{vendor_domain}_{vendor_name}"
+    current_time = datetime.now()
+    
+    if cache_key in security_intelligence_cache:
+        cached_data, cached_time = security_intelligence_cache[cache_key]
+        if (current_time - cached_time).total_seconds() < CACHE_EXPIRY_HOURS * 3600:
+            logger.info(f"🔍 Using cached security intelligence for {vendor_domain}")
+            return cached_data
+    
+    logger.info(f"🔍 Gathering security intelligence for {vendor_domain} using AI...")
+    
+    try:
+        if not OPENAI_AVAILABLE:
+            logger.warning("OpenAI not available for security intelligence gathering")
+            return []
+        
+        # Corporate API configuration
+        corporate_api_key = os.getenv('CORPORATE_AI_API_KEY') or os.getenv('OPENAI_API_KEY')
+        corporate_base_url = "https://chat.expertcity.com/api/v1"
+        
+        if not corporate_api_key:
+            logger.warning("No AI API key available for security intelligence")
+            return []
+        
+        # Initialize OpenAI client
+        from openai import OpenAI
+        client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
+        
+        # Create comprehensive security intelligence prompt
+        prompt = f"""You are a cybersecurity intelligence analyst. Research and provide real, recent security information about this vendor:
+
+Vendor: {vendor_name}
+Domain: {vendor_domain}
+
+Please provide information about:
+1. Recent data breaches or security incidents (last 2 years)
+2. Known vulnerabilities or CVEs affecting their systems
+3. Security certifications or compliance issues
+4. Notable security events or news mentions
+5. Third-party security ratings or alerts
+
+For each security event, provide:
+- Date (if known)
+- Type of incident/vulnerability
+- Severity level
+- Brief description
+- Impact or affected systems
+- Source or reference
+
+Focus on factual, verifiable information. If no significant security events are found, mention that the vendor has a clean security record.
+
+Respond in JSON format with an array of security events:
+{{
+    "security_events": [
+        {{
+            "date": "YYYY-MM-DD or 'Unknown'",
+            "type": "Data Breach|Vulnerability|Compliance Issue|Security Incident",
+            "severity": "Critical|High|Medium|Low",
+            "title": "Brief incident title",
+            "description": "Detailed description",
+            "impact": "Description of impact",
+            "source": "News source or reference",
+            "cve_id": "CVE-XXXX-XXXX if applicable, or null"
+        }}
+    ],
+    "overall_assessment": "Brief overall security posture assessment"
+}}"""
+
+        # Make AI API call
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a cybersecurity intelligence analyst providing factual security information about vendors."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=2000
+        )
+        
+        # Parse AI response
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Try to parse JSON response
+        try:
+            # Clean up response if it has markdown formatting
+            if ai_response.startswith("```json"):
+                ai_response = ai_response.replace("```json", "").replace("```", "")
+            
+            intelligence_data = json.loads(ai_response)
+            security_events = intelligence_data.get("security_events", [])
+            
+            # Cache the results
+            security_intelligence_cache[cache_key] = (security_events, current_time)
+            
+            logger.info(f"🔍 Found {len(security_events)} security events for {vendor_domain}")
+            return security_events
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse AI security intelligence response: {e}")
+            logger.debug(f"AI Response: {ai_response}")
+            return []
+        
+    except Exception as e:
+        logger.error(f"Error gathering security intelligence for {vendor_domain}: {str(e)}")
+        return []
+
+@app.get("/api/v1/security-intelligence/{vendor_domain}")
+async def get_vendor_security_intelligence(vendor_domain: str):
+    """API endpoint to get security intelligence for a specific vendor"""
+    try:
+        # Extract vendor name from domain or use domain as fallback
+        vendor_name = vendor_domain.replace('.com', '').replace('.org', '').replace('.net', '').replace('www.', '')
+        
+        security_events = await gather_security_intelligence(vendor_domain, vendor_name)
+        
+        return {
+            "success": True,
+            "vendor_domain": vendor_domain,
+            "vendor_name": vendor_name,
+            "security_events": security_events,
+            "cached": f"{vendor_domain}_{vendor_name}" in security_intelligence_cache,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in security intelligence API: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "vendor_domain": vendor_domain,
+            "security_events": []
+        }
+
+@app.post("/api/v1/security-intelligence/refresh")
+async def refresh_security_intelligence_cache():
+    """API endpoint to clear security intelligence cache"""
+    global security_intelligence_cache
+    cache_size = len(security_intelligence_cache)
+    security_intelligence_cache.clear()
+    
+    return {
+        "success": True,
+        "message": f"Cleared {cache_size} cached security intelligence entries"
+    }
 
 if __name__ == "__main__":
     import uvicorn

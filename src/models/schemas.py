@@ -221,6 +221,113 @@ class AssessmentResult(BaseModel):
     summary: Dict[str, Any]
 
 
+# Monitoring Schemas
+class AlertSeverity(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class AlertType(str, Enum):
+    DATA_BREACH = "data_breach"
+    SERVICE_OUTAGE = "service_outage"
+    VULNERABILITY = "vulnerability"
+    CERTIFICATE_ISSUE = "certificate_issue"
+    INFRASTRUCTURE_CHANGE = "infrastructure_change"
+    REPUTATION_CHANGE = "reputation_change"
+    REGULATORY_ISSUE = "regulatory_issue"
+    BUSINESS_RISK = "business_risk"
+
+
+class MonitoringStatus(str, Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    DISABLED = "disabled"
+    ERROR = "error"
+
+
+class MonitoringConfigBase(BaseModel):
+    vendor_domain: str = Field(..., max_length=255)
+    vendor_name: Optional[str] = Field(None, max_length=255)
+    assessment_id: Optional[str] = Field(None, max_length=100)
+    status: MonitoringStatus = MonitoringStatus.ACTIVE
+    check_frequency_minutes: int = Field(default=300, ge=5, le=1440)  # 5 minutes to 24 hours
+    alert_thresholds: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+
+class MonitoringConfigCreate(MonitoringConfigBase):
+    pass
+
+
+class MonitoringConfig(MonitoringConfigBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    last_checked: Optional[datetime] = None
+    next_check: Optional[datetime] = None
+    total_checks: int = 0
+    total_alerts: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class MonitoringAlertBase(BaseModel):
+    vendor_domain: str = Field(..., max_length=255)
+    vendor_name: str = Field(..., max_length=255)
+    alert_type: AlertType
+    severity: AlertSeverity
+    title: str = Field(..., max_length=255)
+    description: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    source: str = Field(..., max_length=100)
+    confidence: float = Field(..., ge=0, le=100)
+    recommended_actions: List[str] = Field(default_factory=list)
+
+
+class MonitoringAlertCreate(MonitoringAlertBase):
+    monitoring_config_id: str
+
+
+class MonitoringAlert(MonitoringAlertBase):
+    id: str
+    monitoring_config_id: str
+    created_at: datetime
+    acknowledged: bool = False
+    acknowledged_by: Optional[str] = None
+    acknowledged_at: Optional[datetime] = None
+    resolved: bool = False
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MonitoringCheckBase(BaseModel):
+    monitoring_config_id: str
+    check_type: str = "scheduled"
+    status: str = "completed"
+    alerts_found: int = 0
+    duration_seconds: float
+    intelligence_data: Dict[str, Any] = Field(default_factory=dict)
+    error_message: Optional[str] = None
+
+
+class MonitoringCheckCreate(MonitoringCheckBase):
+    pass
+
+
+class MonitoringCheck(MonitoringCheckBase):
+    id: str
+    started_at: datetime
+    completed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # API Response Schemas
 class APIResponse(BaseModel):
     success: bool
@@ -235,3 +342,12 @@ class PaginatedResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+
+class MonitoringStatusResponse(BaseModel):
+    monitoring_available: bool
+    active_monitors: int
+    total_alerts_today: int
+    system_health: str
+    last_check: datetime
+    version: str
