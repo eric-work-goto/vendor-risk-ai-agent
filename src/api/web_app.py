@@ -10076,6 +10076,185 @@ If no specific sub-processors are found, return an empty array. Be factual and o
             "subprocessors": []
         }
 
+@app.post("/api/v1/find-vendor-support-portal")
+async def find_vendor_support_portal(request: dict):
+    """
+    Find vendor support portal link using AI
+    """
+    try:
+        domain = request.get('domain', '').strip()
+        
+        if not domain:
+            return {
+                "success": False,
+                "error": "Domain is required"
+            }
+        
+        # Use ExpertCity corporate server configuration
+        corporate_base_url = "https://chat.expertcity.com/api/v1"
+        corporate_api_key = "sk-2ea30b318c514c9f874dcd2aa56aa090"
+        
+        # Initialize OpenAI client (v1.0+ API) with corporate server
+        from openai import OpenAI
+        
+        # Try to detect proxy settings
+        import urllib.request
+        proxy_handler = urllib.request.getproxies()
+        
+        # Initialize client with proxy support if needed
+        if proxy_handler:
+            import httpx
+            proxy_client = httpx.Client(proxies=proxy_handler)
+            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key, http_client=proxy_client)
+        else:
+            client = OpenAI(base_url=corporate_base_url, api_key=corporate_api_key)
+        
+        # Create a comprehensive prompt for support portal discovery
+        prompt = f"""Please find and provide the support portal, help center, or customer support page link for {domain}.
+
+IMPORTANT: Search thoroughly for ANY type of customer support resource. Most companies have some form of support page even if it's not called a "portal".
+
+Return the information in the following JSON format:
+
+{{
+    "support_portal": {{
+        "url": "Direct URL to the vendor's support site/help center/customer support page",
+        "name": "Name of the support resource (e.g., 'Help Center', 'Support Site', 'Customer Support', 'Help & Support')",
+        "description": "Brief description of what support is available",
+        "confidence": 85
+    }}
+}}
+
+Search for these types of support resources on {domain}:
+
+PRIMARY TARGETS:
+- Help Center (e.g., https://{domain}/help, https://{domain}/help-center)
+- Support Portal (e.g., https://{domain}/support, https://support.{domain})
+- Customer Support pages (e.g., https://{domain}/customer-support, https://{domain}/support-center)
+- Help & Support sections (e.g., https://{domain}/help-support)
+
+SECONDARY TARGETS:
+- Contact/Support pages (e.g., https://{domain}/contact, https://{domain}/contact-us)
+- Documentation sites (e.g., https://docs.{domain}, https://{domain}/docs)
+- Knowledge Base (e.g., https://{domain}/kb, https://{domain}/knowledge-base)
+- FAQ pages (e.g., https://{domain}/faq, https://{domain}/frequently-asked-questions)
+- Customer portal login pages (e.g., https://{domain}/login, https://customer.{domain})
+- Community forums/support (e.g., https://community.{domain}, https://{domain}/community)
+
+COMMON URL PATTERNS TO CHECK:
+- https://{domain}/support
+- https://support.{domain}
+- https://{domain}/help
+- https://help.{domain}
+- https://{domain}/help-center
+- https://{domain}/customer-support
+- https://{domain}/contact
+- https://docs.{domain}
+- https://{domain}/docs
+- https://{domain}/faq
+
+INSTRUCTIONS:
+- ALWAYS try to find at least one support-related page, even if it's just a contact page
+- Prefer comprehensive help centers over simple contact forms
+- Include the most useful/comprehensive support resource you can find
+- If multiple options exist, choose the most comprehensive one (Help Center > Support Page > Contact Page)
+- Be generous in what you consider a "support resource" - any page where customers can get help counts
+- Only return null if absolutely NO customer support resources exist anywhere on the domain
+
+The goal is to help users find WHERE they can get help with {domain}, not to be restrictive about what qualifies as support."""
+
+        # Make the API call
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a helpful customer support specialist who excels at finding customer support resources for any company. Your goal is to help users find WHERE they can get help, so be thorough and inclusive in your search. Look for help centers, support pages, contact forms, documentation sites, FAQs, or any page where customers can get assistance. Always respond in valid JSON format with the requested structure. Be generous in what you consider a support resource - if customers can get help there, include it."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            max_tokens=800,
+            temperature=0.1
+        )
+        
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Clean up the response text
+        def clean_text(text):
+            if not text:
+                return ""
+            # Remove common JSON formatting artifacts
+            text = text.replace('```json', '').replace('```', '').replace('`', '')
+            # Remove extra whitespace and normalize
+            text = ' '.join(text.split())
+            text = text.strip()
+            return text
+        
+        # Try to parse the JSON response
+        try:
+            import json
+            # Clean the response before parsing
+            cleaned_response = clean_text(ai_response)
+            logger.info(f"Cleaned AI response for {domain}: {cleaned_response}")
+            support_data = json.loads(cleaned_response)
+            logger.info(f"Parsed support data for {domain}: {support_data}")
+            
+            # Validate and clean the data
+            support_portal = None
+            if "support_portal" in support_data and support_data["support_portal"]:
+                portal = support_data["support_portal"]
+                if isinstance(portal, dict) and portal.get("url"):
+                    cleaned_url = clean_text(portal.get("url", ""))
+                    if cleaned_url:  # Make sure URL is not empty after cleaning
+                        support_portal = {
+                            "url": cleaned_url,
+                            "name": clean_text(portal.get("name", "Support Portal")),
+                            "description": clean_text(portal.get("description", "")),
+                            "confidence": portal.get("confidence", 75)
+                        }
+            
+            # Return success: true only if we actually found a support portal
+            if support_portal:
+                return {
+                    "success": True,
+                    "domain": domain,
+                    "support_portal": support_portal
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "No support portal found",
+                    "domain": domain,
+                    "support_portal": None
+                }
+            
+        except (json.JSONDecodeError, Exception) as e:
+            # Fallback if JSON parsing fails
+            logger.warning(f"Failed to parse JSON response for support portal {domain}: {e}")
+            logger.warning(f"Raw response: {ai_response[:200]}...")
+            
+            return {
+                "success": False,
+                "error": f"Unable to parse support portal information: {str(e)}",
+                "domain": domain,
+                "support_portal": None
+            }
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Support portal search failed for {domain}: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "domain": domain,
+            "support_portal": None
+        }
+
 # ================== MONITORING ENDPOINTS ==================
 
 @app.post("/api/v1/monitoring/enable")
